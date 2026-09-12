@@ -25,11 +25,19 @@ body {
   margin: 0 auto;
 }
 
+#app[hidden] {
+  display: none;
+}
+
 #login-screen {
   height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+#login-screen[hidden] {
+  display: none;
 }
 
 #login-form {
