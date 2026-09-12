@@ -1,0 +1,728 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Kully Field Manual</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+:root {
+  --bg: #f5f6f9;
+  --surface: #ffffff;
+  --surface-2: #eceff5;
+  --border: #dde1ea;
+  --text: #1a1e27;
+  --text-dim: #5b6472;
+  --accent: #3f5fd1;
+  --accent-soft: #e7ecfb;
+  --good: #16814f;
+  --good-soft: #e3f6ec;
+  --warn: #9a5b06;
+  --warn-soft: #fbf0dd;
+  --code-bg: #eef0f5;
+  --code-text: #2a3040;
+  --shadow: 0 1px 2px rgba(20,24,34,.04), 0 8px 24px rgba(20,24,34,.05);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1016;
+    --surface: #161a23;
+    --surface-2: #1c212c;
+    --border: #2a3140;
+    --text: #e4e7ee;
+    --text-dim: #8b93a7;
+    --accent: #7c9bff;
+    --accent-soft: #1c2540;
+    --good: #4ade80;
+    --good-soft: #133824;
+    --warn: #f0b429;
+    --warn-soft: #3a2c0e;
+    --code-bg: #0a0d12;
+    --code-text: #cdd3e0;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1016;
+  --surface: #161a23;
+  --surface-2: #1c212c;
+  --border: #2a3140;
+  --text: #e4e7ee;
+  --text-dim: #8b93a7;
+  --accent: #7c9bff;
+  --accent-soft: #1c2540;
+  --good: #4ade80;
+  --good-soft: #133824;
+  --warn: #f0b429;
+  --warn-soft: #3a2c0e;
+  --code-bg: #0a0d12;
+  --code-text: #cdd3e0;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  line-height: 1.55;
+}
+
+code, .mono, .pill, td.num, .diagram text, .fileTree {
+  font-family: "IBM Plex Mono", ui-monospace, "SF Mono", monospace;
+}
+
+h1, h2, h3, .eyebrow { text-wrap: balance; }
+
+a { color: var(--accent); }
+
+/* ---------- layout ---------- */
+
+.shell {
+  display: grid;
+  grid-template-columns: 240px minmax(0,1fr);
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
+nav.toc {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  overflow-y: auto;
+  padding: 32px 20px 32px 28px;
+  border-right: 1px solid var(--border);
+}
+
+nav.toc .brand {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+nav.toc .brand b { font-size: 19px; letter-spacing: -.01em; }
+nav.toc .brand span { font-size: 11px; color: var(--text-dim); }
+
+nav.toc .status {
+  display: flex;
+  gap: 6px;
+  margin: 12px 0 22px;
+  flex-wrap: wrap;
+}
+
+nav.toc ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  counter-reset: toc;
+}
+nav.toc li { counter-increment: toc; margin-bottom: 2px; }
+nav.toc a {
+  display: block;
+  padding: 6px 8px;
+  border-radius: 6px;
+  color: var(--text-dim);
+  text-decoration: none;
+  font-size: 13.5px;
+}
+nav.toc a::before {
+  content: counter(toc, decimal-leading-zero) "  ";
+  color: var(--text-dim);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+}
+nav.toc a:hover { background: var(--surface-2); color: var(--text); }
+
+main { padding: 44px 40px 120px; min-width: 0; }
+
+.hero {
+  padding-bottom: 28px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 40px;
+}
+.hero .eyebrow {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 10px;
+}
+.hero h1 { font-size: 40px; margin: 0 0 14px; letter-spacing: -0.02em; }
+.hero p.lede {
+  font-size: 17px;
+  color: var(--text-dim);
+  max-width: 62ch;
+  margin: 0 0 20px;
+}
+
+section { margin-bottom: 56px; scroll-margin-top: 20px; }
+section > h2 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--text-dim);
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+section > h2 .num { color: var(--accent); font-family: "IBM Plex Mono", monospace; margin-right: 10px; }
+section > h3.title { font-size: 26px; margin: 4px 0 18px; letter-spacing: -0.01em; }
+section > p.dek { color: var(--text-dim); max-width: 68ch; margin: -8px 0 22px; }
+
+p { max-width: 68ch; }
+
+/* ---------- pills / badges ---------- */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  background: var(--surface-2);
+  white-space: nowrap;
+}
+.pill.good { color: var(--good); background: var(--good-soft); border-color: transparent; }
+.pill.good::before { content: "●"; font-size: 8px; }
+.pill.warn { color: var(--warn); background: var(--warn-soft); border-color: transparent; }
+.pill.accent { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
+
+/* ---------- diagram ---------- */
+
+.diagram-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: var(--shadow);
+  overflow-x: auto;
+}
+.diagram { width: 100%; height: auto; min-width: 720px; }
+.diagram .box { fill: var(--surface-2); stroke: var(--border); stroke-width: 1.5; }
+.diagram .box.always-on { stroke: var(--good); }
+.diagram .box.on-demand { stroke: var(--accent); }
+.diagram .box.sandbox { stroke: var(--warn); }
+.diagram text { fill: var(--text); font-size: 13px; }
+.diagram text.label { fill: var(--text-dim); font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; }
+.diagram text.mini { fill: var(--text-dim); font-size: 11px; }
+.diagram path.arrow { stroke: var(--text-dim); stroke-width: 1.5; fill: none; marker-end: url(#arrowhead); }
+.diagram path.arrow.accent { stroke: var(--accent); }
+
+/* ---------- spec grid ---------- */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px 22px;
+  box-shadow: var(--shadow);
+}
+.card h4 {
+  margin: 0 0 4px;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.card .role {
+  display: block;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+}
+.card dl { margin: 0; }
+.card dt {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--text-dim);
+  margin-top: 12px;
+}
+.card dt:first-of-type { margin-top: 0; }
+.card dd { margin: 3px 0 0; font-size: 14px; }
+
+/* ---------- flow steps ---------- */
+
+.flow { display: flex; flex-direction: column; gap: 0; border-left: 2px solid var(--border); margin-left: 8px; }
+.flow-step { position: relative; padding: 0 0 26px 26px; }
+.flow-step:last-child { padding-bottom: 0; }
+.flow-step::before {
+  content: attr(data-n);
+  position: absolute;
+  left: -12px;
+  top: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.flow-step h5 { margin: 0 0 4px; font-size: 15px; }
+.flow-step p { margin: 0; color: var(--text-dim); font-size: 14.5px; }
+
+/* ---------- tables ---------- */
+
+.tablewrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; background: var(--surface); }
+th, td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-dim); background: var(--surface-2); font-weight: 600; }
+tr:last-child td { border-bottom: none; }
+td.num, th.num { font-variant-numeric: tabular-nums; text-align: right; }
+td code, li code { background: var(--code-bg); color: var(--code-text); padding: 1px 6px; border-radius: 5px; font-size: 12.5px; }
+
+/* ---------- file tree ---------- */
+
+.fileTree {
+  background: var(--code-bg);
+  color: var(--code-text);
+  border-radius: 12px;
+  padding: 20px 24px;
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+}
+.fileTree .dir { color: var(--accent); }
+.fileTree .cmt { color: var(--text-dim); }
+
+/* ---------- gotcha callouts ---------- */
+
+.gotcha {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warn);
+  background: var(--surface);
+  border-radius: 0 10px 10px 0;
+  padding: 14px 18px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow);
+}
+.gotcha h5 { margin: 0 0 4px; font-size: 14.5px; }
+.gotcha p { margin: 0; font-size: 14px; color: var(--text-dim); }
+
+/* ---------- security timeline ---------- */
+
+.stack-list { display: flex; flex-direction: column; gap: 10px; }
+.stack-list .row {
+  display: flex;
+  gap: 14px;
+  align-items: baseline;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.stack-list .row .tag {
+  flex: 0 0 auto;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+  width: 92px;
+}
+.stack-list .row p { margin: 0; font-size: 14px; }
+
+footer {
+  border-top: 1px solid var(--border);
+  padding-top: 20px;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+@media (max-width: 880px) {
+  .shell { grid-template-columns: 1fr; }
+  nav.toc { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+  main { padding: 32px 20px 80px; }
+  .hero h1 { font-size: 30px; }
+}
+</style>
+</head>
+<body>
+
+<div class="shell">
+<nav class="toc">
+  <div class="brand"><b>Kully</b><span>field manual</span></div>
+  <div class="status">
+    <span class="pill good">live</span>
+    <span class="pill">~$0–2/mo</span>
+  </div>
+  <ol>
+    <li><a href="#thesis">What Kully is</a></li>
+    <li><a href="#architecture">System map</a></li>
+    <li><a href="#flow">A request, start to finish</a></li>
+    <li><a href="#components">Every piece, and why</a></li>
+    <li><a href="#security">Identity &amp; the secrets story</a></li>
+    <li><a href="#sandbox">The sandboxed coding agent</a></li>
+    <li><a href="#cost">What it actually costs</a></li>
+    <li><a href="#timeline">Build order</a></li>
+    <li><a href="#repo">Repository layout</a></li>
+    <li><a href="#gotchas">Field notes &amp; gotchas</a></li>
+    <li><a href="#next">What's not built yet</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<div class="hero">
+  <p class="eyebrow">Infrastructure reference — last updated 2026-09-12</p>
+  <h1>How Kully is actually built</h1>
+  <p class="lede">Kully is a multi-agent AI cofounder — text chat today, voice later — that you talk to from your phone or laptop. It remembers your projects, routes each message to the right specialist, starts and stops its own server to stay cheap, and can now write and run real code in a sandbox on your behalf. This is the map of every piece, why it's the piece we picked, and how they talk to each other.</p>
+</div>
+
+<section id="thesis">
+  <h2><span class="num">01</span>What Kully is</h2>
+  <p>Everything routes through one idea: <b>keep the always-on surface tiny and free, and let the expensive part sleep.</b> A single Lambda function is the only thing running around the clock — it holds the login page, the "Connect" button, and nothing else. The actual brain — the chat orchestrator with your projects, your memory, your agents — lives on one small EC2 box that's <i>off</i> by default and wakes up on demand, then puts itself back to sleep after an hour of silence.</p>
+  <p>That single design decision is why nearly every other choice in this document exists: two AWS regions, a shared-secret handshake between two services that never fully trust each other, and a push-notification feature that's honest about its own limits instead of pretending to be more reliable than it is.</p>
+</section>
+
+<section id="architecture">
+  <h2><span class="num">02</span>System map</h2>
+  <p class="dek">Two halves that barely know about each other on purpose: an always-on control plane (green) that only ever holds a login page and three buttons, and an on-demand chat plane (blue) that does all the real thinking — plus a sandbox (amber) the chat plane can reach into but that can't reach anything else.</p>
+
+  <div class="diagram-wrap">
+  <svg class="diagram" viewBox="0 0 1080 560" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="arrowhead" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L6,3 L0,6 Z" fill="currentColor" style="color:var(--text-dim)" />
+      </marker>
+    </defs>
+
+    <!-- client -->
+    <rect class="box" x="30" y="40" width="170" height="70" rx="10"/>
+    <text x="115" y="70" text-anchor="middle" font-weight="600">Your phone /</text>
+    <text x="115" y="88" text-anchor="middle" font-weight="600">laptop browser</text>
+
+    <!-- lambda control plane -->
+    <rect class="box always-on" x="30" y="180" width="230" height="130" rx="10"/>
+    <text x="145" y="204" text-anchor="middle" class="label">always on · free</text>
+    <text x="145" y="228" text-anchor="middle" font-weight="600">kully-control-plane</text>
+    <text x="145" y="246" text-anchor="middle" class="mini">Lambda · ap-south-1</text>
+    <text x="55" y="268" class="mini">/auth/login · /connect</text>
+    <text x="55" y="284" class="mini">/disconnect · /status</text>
+    <text x="55" y="300" class="mini">/push/* · serves the PWA</text>
+
+    <!-- eventbridge -->
+    <rect class="box" x="330" y="180" width="170" height="70" rx="10"/>
+    <text x="415" y="204" text-anchor="middle" class="label">every 5 min</text>
+    <text x="415" y="226" text-anchor="middle" font-weight="600">EventBridge</text>
+    <text x="415" y="242" text-anchor="middle" class="mini">idle-check rule</text>
+
+    <!-- EC2 -->
+    <rect class="box on-demand" x="330" y="360" width="260" height="150" rx="10"/>
+    <text x="460" y="384" text-anchor="middle" class="label">on demand · starts/stops itself</text>
+    <text x="460" y="408" text-anchor="middle" font-weight="600">EC2 t3.micro — Ubuntu</text>
+    <text x="460" y="424" text-anchor="middle" class="mini">ap-south-2 · Caddy + Node/Express</text>
+    <text x="352" y="448" class="mini">Router → dev / general / search</text>
+    <text x="352" y="464" class="mini">agents · Supabase memory</text>
+    <text x="352" y="480" class="mini">/chat · /health · /internal/*</text>
+
+    <!-- external apis -->
+    <rect class="box" x="650" y="360" width="200" height="150" rx="10"/>
+    <text x="750" y="384" text-anchor="middle" class="label">managed apis</text>
+    <text x="750" y="408" text-anchor="middle" font-weight="600">Groq · Supabase</text>
+    <text x="750" y="426" text-anchor="middle" font-weight="600">Cohere · Tavily</text>
+    <text x="750" y="450" text-anchor="middle" class="mini">brain · memory</text>
+    <text x="750" y="466" text-anchor="middle" class="mini">embeddings · web search</text>
+
+    <!-- sandbox -->
+    <rect class="box sandbox" x="900" y="180" width="160" height="330" rx="10"/>
+    <text x="980" y="204" text-anchor="middle" class="label">sandboxed</text>
+    <text x="980" y="228" text-anchor="middle" font-weight="600">code-runner</text>
+    <text x="980" y="244" text-anchor="middle" class="mini">node + python</text>
+    <text x="980" y="264" text-anchor="middle" class="mini">Lambdas</text>
+    <text x="925" y="300" class="mini">own IAM role —</text>
+    <text x="925" y="316" class="mini">S3 only, nothing</text>
+    <text x="925" y="332" class="mini">else in the account</text>
+    <rect class="box" x="915" y="360" width="130" height="60" rx="8"/>
+    <text x="980" y="384" text-anchor="middle" font-weight="600">S3</text>
+    <text x="980" y="400" text-anchor="middle" class="mini">workspace/user</text>
+
+    <!-- arrows -->
+    <path class="arrow" d="M115,110 L145,180"/>
+    <path class="arrow" d="M260,220 C300,220 300,200 330,205"/>
+    <path class="arrow accent" d="M115,110 C230,150 330,300 330,400"/>
+    <text x="200" y="150" class="mini" fill="var(--accent)">/chat, /health once running</text>
+    <path class="arrow" d="M415,250 L415,330 L460,360" />
+    <path class="arrow" d="M590,435 L650,435"/>
+    <path class="arrow accent" d="M590,410 C700,300 850,260 900,255"/>
+    <text x="640" y="300" class="mini" fill="var(--accent)">run_code (shared secret)</text>
+    <path class="arrow" d="M980,360 L980,340"/>
+  </svg>
+  </div>
+</section>
+
+<section id="flow">
+  <h2><span class="num">03</span>A request, start to finish</h2>
+  <p class="dek">What actually happens between tapping "Connect" on your phone and Kully answering you.</p>
+
+  <div class="flow">
+    <div class="flow-step" data-n="1">
+      <h5>Sign in, from a page that's always there</h5>
+      <p>You open the Lambda's URL — not the chat server's, that one may well be switched off right now. It checks your username against a bcrypt hash and hands back a 30-day JWT.</p>
+    </div>
+    <div class="flow-step" data-n="2">
+      <h5>Tap Connect</h5>
+      <p>The Lambda calls <code>ec2:StartInstances</code> on your box and returns immediately. Your screen shows a "waking up your server" banner.</p>
+    </div>
+    <div class="flow-step" data-n="3">
+      <h5>The box boots, on its own</h5>
+      <p>Ubuntu comes up, systemd starts Caddy and the Node app automatically (no one has to SSH in). The browser polls <code>/health</code> every few seconds — usually ready inside 10–20 seconds.</p>
+    </div>
+    <div class="flow-step" data-n="4">
+      <h5>You send a message</h5>
+      <p>It goes to the EC2 box directly, bearing the same JWT the Lambda issued. A tiny classifier call to Groq decides: <code>dev</code>, <code>general</code>, or <code>search</code>.</p>
+    </div>
+    <div class="flow-step" data-n="5">
+      <h5>The right specialist answers</h5>
+      <p>That agent pulls in relevant long-term facts (Cohere embeddings + Supabase's <code>pgvector</code>), fresh web results (Tavily) if it's the search agent, or reaches for the code sandbox if it's the dev agent — then calls Groq for the reply.</p>
+    </div>
+    <div class="flow-step" data-n="6">
+      <h5>The conversation remembers itself</h5>
+      <p>The exchange is saved to Supabase, a quick Groq pass extracts anything worth remembering long-term, and it's embedded and stored for next time — even in a brand new conversation.</p>
+    </div>
+    <div class="flow-step" data-n="7">
+      <h5>Left alone, it puts itself to bed</h5>
+      <p>Every five minutes, EventBridge asks the box "how long since your last real request?" via a shared-secret endpoint. Past an hour of nothing, it calls <code>ec2:StopInstances</code> itself.</p>
+    </div>
+  </div>
+</section>
+
+<section id="components">
+  <h2><span class="num">04</span>Every piece, and why</h2>
+  <p class="dek">Nothing here was the only option — each row is a real trade-off that got made on purpose.</p>
+
+  <div class="grid">
+    <div class="card">
+      <h4>Frontend <span class="pill accent">PWA</span></h4>
+      <span class="role">web/ — vanilla HTML/CSS/JS, no framework</span>
+      <dl>
+        <dt>Why no framework</dt><dd>Three screens (login, chat, two panels) don't need React's bundle size on a box that also has to leave RAM for the actual product.</dd>
+        <dt>Why a PWA, not an APK</dt><dd>A native app's real payoff (mic access, push reliability) only lands once voice exists. Until then, "Add to Home Screen" gets 90% of the feel for 0% of the Expo/EAS build pipeline.</dd>
+        <dt>Served from</dt><dd>The control-plane Lambda itself — the page has to load even when the chat server is asleep.</dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h4>Control plane</h4>
+      <span class="role">lambda/control-plane — Node 22, Lambda Function URL</span>
+      <dl>
+        <dt>Why Lambda</dt><dd>It has to be on 24/7 for the login screen to exist at all, and at this traffic level it's inside the always-free tier — an EC2 box for this alone would defeat the whole point.</dd>
+        <dt>Why a different region</dt><dd><code>ap-south-2</code> (where the EC2 box lives) doesn't support Function URLs yet, so this runs in <code>ap-south-1</code> and just points its EC2 client at the other region explicitly.</dd>
+        <dt>Owns</dt><dd>Login, start/stop/status, push subscriptions, the idle-check schedule.</dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h4>Chat orchestrator</h4>
+      <span class="role">server/ — Node 22 + Express, on EC2 t3.micro</span>
+      <dl>
+        <dt>Why Node over Python/FastAPI</dt><dd>Lower baseline RSS on a 1GB box, and the workload is 100% waiting on other people's APIs — an event loop suits that better than worker processes.</dd>
+        <dt>Why a real VM, not another Lambda</dt><dd>It needs to stay warm for a whole conversation's back-and-forth without cold-start tax each message, and systemd gives free crash recovery.</dd>
+        <dt>Stateless by design</dt><dd>Everything lives in Supabase — the process can restart, or one day run on more than one box, without losing anything.</dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h4>Router + three agents</h4>
+      <span class="role">server/src/orchestrator/agents</span>
+      <dl>
+        <dt>How routing works</dt><dd>A cheap Groq call (<code>gpt-oss-20b</code>) reads the message and answers with one word: <code>dev</code>, <code>general</code>, or <code>search</code>.</dd>
+        <dt>Why editable prompts</dt><dd>Each agent's system prompt now lives in Supabase (<code>agent_config</code>, 60s cache) instead of only in source — you can retune a specialist's personality from the Skills panel without a redeploy.</dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h4>Groq</h4>
+      <span class="role">the brain — chat completions</span>
+      <dl>
+        <dt>Why Groq</dt><dd>Free-tier LLM access that's genuinely fast, no self-hosted GPU to babysit on a t3.micro.</dd>
+        <dt>The catch</dt><dd>Its whole model catalog turned over mid-build (Llama 3.x retired) for <code>gpt-oss</code> reasoning models, which spend hidden tokens "thinking" before answering — every call now sets <code>reasoning_format: hidden</code> and budgets extra tokens for it.</dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h4>Supabase</h4>
+      <span class="role">memory — Postgres + pgvector</span>
+      <dl>
+        <dt>Why Supabase</dt><dd>Managed Postgres with vector search built in, on a free tier, instead of self-hosting a database on the same tiny box that also runs the app.</dd>
+        <dt>Holds</dt><dd>Conversations &amp; messages, long-term facts with embeddings, agent prompts, push subscriptions, routing logs.</dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h4>Cohere</h4>
+      <span class="role">embeddings — embed-english-v3.0</span>
+      <dl>
+        <dt>Why a second AI vendor</dt><dd>Groq has no embeddings endpoint at all — this is the one gap Groq's free tier can't fill.</dd>
+        <dt>Used for</dt><dd>Turning extracted facts into 1024-dim vectors so a brand-new conversation can still recall something you said days ago.</dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h4>Tavily</h4>
+      <span class="role">live web search</span>
+      <dl>
+        <dt>Why</dt><dd>Neither Groq nor Supabase can see the live web — Tavily is built specifically for feeding LLM agents clean search results.</dd>
+        <dt>Used by</dt><dd>The <code>search</code> agent only, injected as context before its Groq call.</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<section id="security">
+  <h2><span class="num">05</span>Identity &amp; the secrets story</h2>
+  <p class="dek">Auth and credential-handling weren't an afterthought bolted on — the account itself got tightened up before any of the app was built.</p>
+
+  <div class="stack-list">
+    <div class="row"><span class="tag">account</span><p>The AWS root access key was pasted into chat once — treated as burned on the spot. A scoped IAM user (<code>kully-project</code>) replaced it for all further work.</p></div>
+    <div class="row"><span class="tag">roles</span><p>Three separate IAM roles now exist, each able to do less than the last: <code>kully-lambda-role</code> (start/stop/describe one EC2 instance), <code>kully-code-runner-role</code> (touch one S3 bucket, nothing else), and the account-level user above.</p></div>
+    <div class="row"><span class="tag">login</span><p>Single user, no signup route exists anywhere in the codebase. A bcrypt hash lives only in the Lambda's environment — never in git, never in a chat transcript that gets persisted.</p></div>
+    <div class="row"><span class="tag">sessions</span><p>A 30-day JWT, signed with a secret shared between the Lambda (issuer) and the EC2 app (verifier only — it never issues tokens itself).</p></div>
+    <div class="row"><span class="tag">machine-to-machine</span><p>The EC2 box, the Lambda, and the code-runner sandbox don't share one master key — each pair that needs to trust each other gets its own shared secret (<code>INTERNAL_API_SECRET</code>, <code>CODE_RUNNER_SECRET</code>) with exactly one job.</p></div>
+  </div>
+</section>
+
+<section id="sandbox">
+  <h2><span class="num">06</span>The sandboxed coding agent</h2>
+  <p class="dek">The one piece with real teeth: the <code>dev</code> agent can now write and execute actual code, not just talk about it. Where that code runs was the whole design question.</p>
+
+  <p>The EC2 box holds the production secrets — Supabase's service key, three API keys, the JWT secret. Letting an LLM run arbitrary code <i>there</i> would mean one prompt-injected instruction away from those secrets. So execution never happens on that box at all.</p>
+
+  <p>Instead, Groq's native tool-calling (confirmed working on <code>openai/gpt-oss-120b</code>) lets the model decide when to call <code>run_code</code>. That call leaves the EC2 process entirely and hits one of two dedicated Lambdas — <code>kully-code-runner-node</code> or <code>kully-code-runner-python</code> — each running under <code>kully-code-runner-role</code>, an IAM role that can reach exactly one S3 bucket and nothing else in the account. Every invocation downloads that user's folder from S3, runs the snippet with a 10-second hard timeout, uploads whatever changed, and returns stdout/stderr. A file written in one message is still there in the next — proven live: a chat turn wrote <code>project_note.txt</code>, the next turn in the same conversation read it back byte-for-byte.</p>
+</section>
+
+<section id="cost">
+  <h2><span class="num">07</span>What it actually costs</h2>
+  <p class="dek">The entire design brief was "stay near $0" — here's what's actually keeping it there.</p>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Service</th><th>Free allowance</th><th>Why Kully stays inside it</th></tr></thead>
+    <tbody>
+      <tr><td>EC2 t3.micro</td><td>750 hrs/mo, first 12 months</td><td>Off by default — auto-stops after an hour idle, so real usage is a small fraction of "always on" hours anyway.</td></tr>
+      <tr><td>Lambda (×3 functions)</td><td>1M requests + 400,000 GB-seconds/mo, forever</td><td>Personal-app traffic volumes don't come close.</td></tr>
+      <tr><td>S3</td><td>Pennies at this scale</td><td>A few KB of workspace files per user.</td></tr>
+      <tr><td>Supabase</td><td>500MB Postgres, free tier</td><td>Text conversations + small embeddings are tiny.</td></tr>
+      <tr><td>Groq</td><td>Generous free-tier rate limits</td><td>The whole reason it was picked over paid LLM APIs.</td></tr>
+      <tr><td>Cohere</td><td>Free trial key</td><td>Only used for short fact strings, low volume.</td></tr>
+      <tr><td>Tavily</td><td>1,000 searches/mo</td><td>Only the <code>search</code> agent calls it, on demand.</td></tr>
+      <tr><td>DuckDNS + GitHub</td><td>Free, no time limit</td><td>Domain + public source repo.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section id="timeline">
+  <h2><span class="num">08</span>Build order</h2>
+  <p class="dek">Not built all at once — each phase was a working checkpoint before the next began.</p>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Phase</th><th>What landed</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">0 + 1</td><td>Router + dev/general/search agents, Supabase memory, deployed to EC2 behind Caddy/HTTPS.</td></tr>
+      <tr><td class="mono">2</td><td>Single-user sign-in (bcrypt + JWT) — no signup route, ever.</td></tr>
+      <tr><td class="mono">3</td><td>Connect/disconnect control plane — the EC2 box stops being always-on.</td></tr>
+      <tr><td class="mono">4</td><td>Installable PWA — icon, manifest, no native APK (yet).</td></tr>
+      <tr><td class="mono">5</td><td>Conversation history + agent "skills" editing from the UI.</td></tr>
+      <tr><td class="mono">6</td><td>Service worker, safe-area insets, best-effort push notifications.</td></tr>
+      <tr><td class="mono">7</td><td>Sandboxed <code>run_code</code> tool for the dev agent.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section id="repo">
+  <h2><span class="num">09</span>Repository layout</h2>
+  <div class="fileTree">
+<span class="dir">server/</span>                  <span class="cmt"># the chat orchestrator — runs on EC2</span>
+  src/orchestrator/       <span class="cmt"># router.js + agents/{dev,general,search}Agent.js</span>
+  src/memory/             <span class="cmt"># Supabase access: conversations, facts, agent_config</span>
+  src/llm/                <span class="cmt"># Groq, Cohere, Tavily, code-runner clients</span>
+  src/routes/             <span class="cmt"># /chat /conversations /agents /internal /health</span>
+  src/auth/                <span class="cmt"># JWT verification (issuance lives in the Lambda)</span>
+<span class="dir">web/</span>                    <span class="cmt"># the PWA — served BY the Lambda, not EC2</span>
+  index.html, app.js, style.css, sw.js, manifest.json
+<span class="dir">lambda/control-plane/</span>   <span class="cmt"># always-on: login, connect/disconnect, push, serves web/</span>
+<span class="dir">lambda/code-runner-node/</span> <span class="cmt"># sandboxed Node execution, own IAM role</span>
+<span class="dir">lambda/code-runner-python/</span> <span class="cmt"># sandboxed Python execution, same role</span>
+<span class="dir">infra/</span>                  <span class="cmt"># schema.sql, Caddyfile, systemd unit, EC2 bootstrap script</span>
+  </div>
+</section>
+
+<section id="gotchas">
+  <h2><span class="num">10</span>Field notes &amp; gotchas</h2>
+  <p class="dek">The five things that didn't work the first time, kept here so they don't get rediscovered the hard way.</p>
+
+  <div class="gotcha">
+    <h5>Groq's model catalog turned over mid-build</h5>
+    <p>Llama 3.x disappeared from Groq entirely; the replacement <code>gpt-oss</code> models spend hidden reasoning tokens that can eat an entire small token budget before producing visible output. Fix: <code>reasoning_format: hidden</code> everywhere, plus real token headroom on short structured calls (routing, fact extraction).</p>
+  </div>
+  <div class="gotcha">
+    <h5>A public Lambda Function URL needs <em>two</em> permission grants</h5>
+    <p>Since October 2025, AWS requires both <code>lambda:InvokeFunctionUrl</code> <em>and</em> <code>lambda:InvokeFunction</code> resource-policy statements for anonymous access — the older one-permission pattern now silently 403s.</p>
+  </div>
+  <div class="gotcha">
+    <h5><code>ap-south-2</code> has no Function URL support</h5>
+    <p>Found this only by trying — the control-plane and code-runner Lambdas all live in <code>ap-south-1</code> instead, with the EC2 client region pinned explicitly since it no longer matches the Lambda's own region.</p>
+  </div>
+  <div class="gotcha">
+    <h5>Caddy doesn't auto-discover new routes</h5>
+    <p>Every new backend route (<code>/auth/*</code>, then later <code>/conversations*</code>, <code>/agents*</code>) needs its own explicit <code>handle</code> block in the Caddyfile — forgotten twice, caught both times by a 404 that looked like a backend bug.</p>
+  </div>
+  <div class="gotcha">
+    <h5>An ID selector can silently defeat <code>[hidden]</code></h5>
+    <p><code>#login-screen { display: flex }</code> outranked the browser's default <code>[hidden] { display: none }</code> rule, so toggling <code>.hidden</code> in JS updated the DOM correctly while the screen stayed visually stuck. Fixed with an explicit <code>#login-screen[hidden] { display: none }</code>.</p>
+  </div>
+</section>
+
+<section id="next">
+  <h2><span class="num">11</span>What's not built yet</h2>
+  <div class="grid">
+    <div class="card">
+      <h4>Voice</h4>
+      <span class="role">deliberately deferred</span>
+      <dl><dt>Plan</dt><dd>Groq's hosted Whisper for speech-to-text, Amazon Polly for text-to-speech — both are external API calls, so the 1GB box never has to run a model itself.</dd></dl>
+    </div>
+    <div class="card">
+      <h4>Native app, reconsidered</h4>
+      <span class="role">on hold, tied to voice</span>
+      <dl><dt>Why it's parked</dt><dd>An APK's real advantage — microphone access — only matters once voice exists. Revisit then, not before.</dd></dl>
+    </div>
+    <div class="card">
+      <h4>Tighter IAM</h4>
+      <span class="role">known, not yet done</span>
+      <dl><dt>Open item</dt><dd>The <code>kully-project</code> account-level user still holds <code>AdministratorAccess</code> rather than the recommended <code>PowerUserAccess</code>.</dd></dl>
+    </div>
+    <div class="card">
+      <h4>Kubernetes</h4>
+      <span class="role">the long-term scaling path</span>
+      <dl><dt>Why not yet</dt><dd>One box, started on demand, comfortably serves one user — k3s starts earning its keep once there's more than one workload or one user.</dd></dl>
+    </div>
+  </div>
+</section>
+
+<footer>Kully — built phase by phase on Groq, Supabase, AWS Lambda &amp; EC2, Cohere, and Tavily. This page describes the system as of 2026-09-12; infrastructure state (which boxes are on, which secrets are current) changes faster than this document does.</footer>
+
+</main>
+</div>
+</body>
+</html>
