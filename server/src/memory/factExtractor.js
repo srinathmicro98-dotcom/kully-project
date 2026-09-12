@@ -13,6 +13,7 @@ export async function extractAndStoreFacts({ userId, userMessage, assistantReply
       model: MODELS.fast,
       temperature: 0,
       maxTokens: 300,
+      reasoningEffort: 'low',
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: `User: ${userMessage}\nAssistant: ${assistantReply}` },

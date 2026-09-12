@@ -14,7 +14,8 @@ export async function classify(message) {
   const raw = await chatCompletion({
     model: MODELS.fast,
     temperature: 0,
-    maxTokens: 10,
+    maxTokens: 60,
+    reasoningEffort: 'low',
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: message },
