@@ -80,19 +80,43 @@ header h1 {
   margin: 0;
 }
 
-header input {
+header h1 {
   flex: 1;
-  background: var(--panel);
-  border: 1px solid #262b36;
-  color: var(--text);
-  padding: 6px 10px;
-  border-radius: 6px;
-  font-size: 12px;
+}
+
+.controls {
+  display: flex;
+  gap: 8px;
 }
 
 header button {
   padding: 6px 12px;
   font-size: 12px;
+}
+
+#disconnectBtn {
+  background: #3a3f4b;
+}
+
+#signOutBtn {
+  background: transparent;
+  border: 1px solid #262b36;
+  color: var(--muted);
+}
+
+#banner {
+  margin: 0;
+  padding: 10px 16px;
+  background: #2a2410;
+  color: #e8c468;
+  font-size: 13px;
+  border-bottom: 1px solid #262b36;
+}
+
+#input:disabled,
+#composer button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 #messages {

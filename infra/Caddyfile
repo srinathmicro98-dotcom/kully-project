@@ -5,11 +5,10 @@ kully-cofounder.duckdns.org {
 	handle /health {
 		reverse_proxy 127.0.0.1:3000
 	}
-	handle /auth/* {
+	handle /internal/* {
 		reverse_proxy 127.0.0.1:3000
 	}
 	handle {
-		root * /home/ubuntu/kully/web
-		file_server
+		respond "Kully chat API — see the control-plane app for the UI" 404
 	}
 }

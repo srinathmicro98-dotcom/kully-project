@@ -1,12 +1,8 @@
 import jwt from 'jsonwebtoken';
 import { config } from '../config.js';
 
-const EXPIRES_IN = '30d';
-
-export function issueToken() {
-  return jwt.sign({ sub: config.authUsername }, config.jwtSecret, { expiresIn: EXPIRES_IN });
-}
-
+// Tokens are issued by the control-plane Lambda (which owns login), not here —
+// this just verifies them, using the same JWT_SECRET both sides are configured with.
 export function verifyToken(token) {
   return jwt.verify(token, config.jwtSecret);
 }

@@ -20,13 +20,17 @@
 <div id="app" hidden>
   <header>
     <h1>Kully</h1>
-    <input id="serverUrl" placeholder="Server URL (e.g. https://kully-cofounder.duckdns.org)" />
-    <button id="signOut" type="button">Sign out</button>
+    <div class="controls">
+      <button id="connectBtn" type="button">Connect</button>
+      <button id="disconnectBtn" type="button" hidden>Disconnect</button>
+      <button id="signOutBtn" type="button">Sign out</button>
+    </div>
   </header>
+  <p id="banner" hidden></p>
   <main id="messages"></main>
   <form id="composer">
-    <input id="input" placeholder="Message Kully..." autocomplete="off" />
-    <button type="submit">Send</button>
+    <input id="input" placeholder="Message Kully..." autocomplete="off" disabled />
+    <button type="submit" disabled>Send</button>
   </form>
 </div>
 <script src="app.js"></script>
