@@ -1,0 +1,16 @@
+[Unit]
+Description=Kully orchestrator
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/kully/server
+EnvironmentFile=/home/ubuntu/kully/server/.env
+ExecStart=/usr/bin/node src/index.js
+Restart=on-failure
+RestartSec=5
+MemoryMax=400M
+
+[Install]
+WantedBy=multi-user.target
