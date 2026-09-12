@@ -14,7 +14,8 @@ const state = {
   token: localStorage.getItem('kully_token') || null,
 };
 
-serverUrlEl.value = localStorage.getItem('kully_server_url') || '';
+const sameOriginDefault = location.protocol.startsWith('http') ? location.origin : '';
+serverUrlEl.value = localStorage.getItem('kully_server_url') || sameOriginDefault;
 
 function currentServerUrl() {
   return serverUrlEl.value.trim().replace(/\/$/, '');
