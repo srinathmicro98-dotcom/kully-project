@@ -28,6 +28,7 @@ cp "$SCRIPT_DIR/../web/manifest.json" "$CP_DIR/public/manifest.json"
 cp "$SCRIPT_DIR/../web/icon-192.png" "$CP_DIR/public/icon-192.png"
 cp "$SCRIPT_DIR/../web/icon-512.png" "$CP_DIR/public/icon-512.png"
 cp "$SCRIPT_DIR/../web/apple-touch-icon.png" "$CP_DIR/public/apple-touch-icon.png"
+cp "$SCRIPT_DIR/../web/sw.js" "$CP_DIR/public/sw.js"
 
 echo "== zip =="
 rm -f "$CP_DIR/function.zip"

@@ -3,6 +3,7 @@ import { agents } from '../orchestrator/agents/index.js';
 import { classify } from '../orchestrator/router.js';
 import {
   createConversation,
+  setConversationTitle,
   insertMessage,
   getRecentMessages,
   logRouting,
@@ -24,9 +25,14 @@ chatRouter.post('/chat', async (req, res) => {
   }
 
   try {
+    const isNewConversation = !bodyConversationId;
     const conversationId = bodyConversationId || (await createConversation(userId));
 
     const userMessageId = await insertMessage({ conversationId, role: 'user', content: message });
+    if (isNewConversation) {
+      const title = message.length > 40 ? `${message.slice(0, 40)}…` : message;
+      await setConversationTitle(conversationId, title);
+    }
     const history = await getRecentMessages(conversationId, 10);
 
     let relevantFacts = [];

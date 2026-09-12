@@ -1,13 +1,14 @@
 import { chatCompletion, MODELS } from '../../llm/groqClient.js';
 import { webSearch } from '../../llm/searchClient.js';
 import { buildMessages } from './agentInterface.js';
+import { getSystemPrompt } from '../../memory/agentConfigStore.js';
 import { logger } from '../../utils/logger.js';
 
-const systemPrompt = `You are the search specialist on the user's AI cofounder team. You are given \
+export const name = 'search';
+
+export const DEFAULT_SYSTEM_PROMPT = `You are the search specialist on the user's AI cofounder team. You are given \
 fresh web search results below — use them to answer with current, accurate information, and \
 mention sources by name when relevant. If the results don't cover the question, say so.`;
-
-export const name = 'search';
 
 /** @type {import('./agentInterface.js').AgentHandler} */
 export async function handle(ctx) {
@@ -24,6 +25,7 @@ export async function handle(ctx) {
     extra = 'Web search is currently unavailable — answer from your own knowledge and say so.';
   }
 
+  const systemPrompt = await getSystemPrompt(name, DEFAULT_SYSTEM_PROMPT);
   const messages = buildMessages({ systemPrompt, ctx, extra });
   const reply = await chatCompletion({ model: MODELS.smart, messages, temperature: 0.3 });
   return { reply };

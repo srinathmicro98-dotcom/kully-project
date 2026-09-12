@@ -1,7 +1,8 @@
 // The chat/orchestrator box (starts/stops on demand) — everything else
-// (login, connect/disconnect, status) is served by this same page's own
-// origin, since that's the always-on control-plane Lambda.
+// (login, connect/disconnect, status, history, skills, push) is served by
+// this same page's own origin, since that's the always-on control-plane Lambda.
 const CHAT_URL = 'https://kully-cofounder.duckdns.org';
+const VAPID_PUBLIC_KEY = 'BLsbygSoKx_UIYEylUFATOeyWJAO35gH6EGYSEsp5s6OK7kTyDTgafb3S5NCXws3_Fcj6g63j1xo4DCmzhG_qOU';
 
 const loginScreen = document.getElementById('login-screen');
 const loginForm = document.getElementById('login-form');
@@ -15,6 +16,13 @@ const connectBtn = document.getElementById('connectBtn');
 const disconnectBtn = document.getElementById('disconnectBtn');
 const signOutBtn = document.getElementById('signOutBtn');
 const bannerEl = document.getElementById('banner');
+const historyBtn = document.getElementById('historyBtn');
+const historyPanel = document.getElementById('historyPanel');
+const historyList = document.getElementById('historyList');
+const skillsBtn = document.getElementById('skillsBtn');
+const skillsPanel = document.getElementById('skillsPanel');
+const skillsList = document.getElementById('skillsList');
+const notifyBtn = document.getElementById('notifyBtn');
 
 const state = {
   userId: 'default-user',
@@ -23,6 +31,7 @@ const state = {
 };
 
 let healthPollTimer = null;
+let notifiedThisConnect = false;
 
 function setBanner(text) {
   bannerEl.hidden = !text;
@@ -59,8 +68,23 @@ async function controlFetch(path, options = {}) {
   });
 }
 
+async function notifyReady() {
+  if (notifiedThisConnect) return;
+  notifiedThisConnect = true;
+  try {
+    await controlFetch('/push/notify-ready', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: state.userId }),
+    });
+  } catch {
+    // best-effort — not having a notification is not worth surfacing an error for
+  }
+}
+
 function pollUntilHealthy() {
   clearInterval(healthPollTimer);
+  notifiedThisConnect = false;
   setBanner('Connecting… waking up your server, this can take up to a minute.');
   setChatEnabled(false);
 
@@ -71,6 +95,7 @@ function pollUntilHealthy() {
         clearInterval(healthPollTimer);
         setBanner(null);
         setChatEnabled(true);
+        notifyReady();
       }
     } catch {
       // still booting — keep polling
@@ -116,6 +141,7 @@ loginForm.addEventListener('submit', async (e) => {
     localStorage.setItem('kully_token', data.token);
     showApp();
     refreshStatus();
+    refreshNotifyButton();
   } catch {
     loginError.hidden = false;
   }
@@ -190,9 +216,207 @@ composer.addEventListener('submit', async (e) => {
   }
 });
 
+// ---- History panel ----
+
+function openPanel(panel) {
+  historyPanel.hidden = panel !== historyPanel;
+  skillsPanel.hidden = panel !== skillsPanel;
+  panel.hidden = false;
+}
+
+function closePanels() {
+  historyPanel.hidden = true;
+  skillsPanel.hidden = true;
+}
+
+document.querySelectorAll('.closePanelBtn').forEach((btn) => btn.addEventListener('click', closePanels));
+
+function formatRelativeDate(iso) {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.round(diffMs / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+async function loadHistory() {
+  historyList.textContent = 'Loading…';
+  try {
+    const res = await controlFetch(`${CHAT_URL}/conversations?user_id=${encodeURIComponent(state.userId)}`);
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const conversations = await res.json();
+
+    historyList.innerHTML = '';
+    if (!conversations.length) {
+      historyList.textContent = 'No past conversations yet.';
+      return;
+    }
+    for (const convo of conversations) {
+      const item = document.createElement('div');
+      item.className = 'history-item';
+      const title = document.createElement('span');
+      title.className = 'title';
+      title.textContent = convo.title || '(untitled)';
+      const date = document.createElement('span');
+      date.className = 'date';
+      date.textContent = formatRelativeDate(convo.updated_at);
+      item.appendChild(title);
+      item.appendChild(date);
+      item.addEventListener('click', () => loadConversation(convo.id));
+      historyList.appendChild(item);
+    }
+  } catch (err) {
+    historyList.textContent = `Could not load history: ${err.message}. Is your server connected?`;
+  }
+}
+
+async function loadConversation(conversationId) {
+  try {
+    const res = await controlFetch(`${CHAT_URL}/conversations/${conversationId}/messages`);
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const msgs = await res.json();
+
+    messagesEl.innerHTML = '';
+    for (const m of msgs) addMessage(m.role, m.content, m.agent);
+    state.conversationId = conversationId;
+    closePanels();
+  } catch (err) {
+    setBanner(`Could not load that conversation: ${err.message}`);
+  }
+}
+
+historyBtn.addEventListener('click', () => {
+  openPanel(historyPanel);
+  loadHistory();
+});
+
+historyPanel.querySelector('.newChatBtn').addEventListener('click', () => {
+  state.conversationId = null;
+  messagesEl.innerHTML = '';
+  closePanels();
+});
+
+// ---- Skills panel ----
+
+async function loadSkills() {
+  skillsList.textContent = 'Loading…';
+  try {
+    const res = await controlFetch(`${CHAT_URL}/agents`);
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const configs = await res.json();
+
+    skillsList.innerHTML = '';
+    for (const cfg of configs) {
+      const item = document.createElement('div');
+      item.className = 'skill-item';
+
+      const label = document.createElement('label');
+      label.textContent = cfg.name;
+      const textarea = document.createElement('textarea');
+      textarea.value = cfg.systemPrompt;
+      const saveBtn = document.createElement('button');
+      saveBtn.type = 'button';
+      saveBtn.textContent = 'Save';
+      const savedTag = document.createElement('span');
+      savedTag.className = 'saved';
+      savedTag.textContent = 'Saved ✓';
+      savedTag.hidden = true;
+
+      saveBtn.addEventListener('click', async () => {
+        savedTag.hidden = true;
+        try {
+          const putRes = await controlFetch(`${CHAT_URL}/agents/${cfg.name}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ systemPrompt: textarea.value }),
+          });
+          if (!putRes.ok) throw new Error(`status ${putRes.status}`);
+          savedTag.hidden = false;
+          setTimeout(() => (savedTag.hidden = true), 3000);
+        } catch (err) {
+          alert(`Could not save: ${err.message}`);
+        }
+      });
+
+      item.appendChild(label);
+      item.appendChild(textarea);
+      item.appendChild(saveBtn);
+      item.appendChild(savedTag);
+      skillsList.appendChild(item);
+    }
+  } catch (err) {
+    skillsList.textContent = `Could not load skills: ${err.message}. Is your server connected?`;
+  }
+}
+
+skillsBtn.addEventListener('click', () => {
+  openPanel(skillsPanel);
+  loadSkills();
+});
+
+// ---- Push notifications ----
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
+}
+
+async function refreshNotifyButton() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    notifyBtn.hidden = true;
+    return;
+  }
+  const reg = await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.getSubscription();
+  notifyBtn.classList.toggle('active', !!sub);
+}
+
+notifyBtn.addEventListener('click', async () => {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const existing = await reg.pushManager.getSubscription();
+
+    if (existing) {
+      await existing.unsubscribe();
+      notifyBtn.classList.remove('active');
+      return;
+    }
+
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return;
+
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+    });
+
+    await controlFetch('/push/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: state.userId, subscription: sub.toJSON() }),
+    });
+    notifyBtn.classList.add('active');
+  } catch (err) {
+    alert(`Could not enable notifications: ${err.message}`);
+  }
+});
+
+// ---- Service worker ----
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {
+    // non-fatal — app still works without offline caching
+  });
+}
+
 if (state.token) {
   showApp();
   refreshStatus();
+  refreshNotifyButton();
 } else {
   showLogin();
 }

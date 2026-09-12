@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Kully</title>
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" href="icon-192.png" />
@@ -26,8 +26,11 @@
 
 <div id="app" hidden>
   <header>
+    <button id="historyBtn" type="button" class="icon-btn" title="History">☰</button>
     <h1>Kully</h1>
     <div class="controls">
+      <button id="notifyBtn" type="button" class="ghost-btn" title="Notify me when ready">🔔</button>
+      <button id="skillsBtn" type="button" class="ghost-btn" title="Skills">Skills</button>
       <button id="connectBtn" type="button">Connect</button>
       <button id="disconnectBtn" type="button" hidden>Disconnect</button>
       <button id="signOutBtn" type="button">Sign out</button>
@@ -39,6 +42,23 @@
     <input id="input" placeholder="Message Kully..." autocomplete="off" disabled />
     <button type="submit" disabled>Send</button>
   </form>
+
+  <div id="historyPanel" class="panel" hidden>
+    <div class="panel-header">
+      <h2>History</h2>
+      <button type="button" class="newChatBtn">+ New chat</button>
+      <button type="button" class="closePanelBtn">✕</button>
+    </div>
+    <div class="panel-body" id="historyList"></div>
+  </div>
+
+  <div id="skillsPanel" class="panel" hidden>
+    <div class="panel-header">
+      <h2>Skills</h2>
+      <button type="button" class="closePanelBtn">✕</button>
+    </div>
+    <div class="panel-body" id="skillsList"></div>
+  </div>
 </div>
 <script src="app.js"></script>
 </body>

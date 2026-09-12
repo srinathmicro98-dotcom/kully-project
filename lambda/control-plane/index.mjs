@@ -3,6 +3,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import webpush from 'web-push';
+import { createClient } from '@supabase/supabase-js';
 import {
   EC2Client,
   StartInstancesCommand,
@@ -15,6 +17,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // (ap-south-2 doesn't support Function URLs yet) — pin the region explicitly
 // rather than inheriting whatever region the Lambda itself deploys in.
 const ec2 = new EC2Client({ region: process.env.EC2_REGION || 'ap-south-2' });
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+
+webpush.setVapidDetails(
+  'mailto:kully@example.com',
+  process.env.VAPID_PUBLIC_KEY,
+  process.env.VAPID_PRIVATE_KEY,
+);
 
 const INSTANCE_ID = process.env.INSTANCE_ID;
 const IDLE_TIMEOUT_SECONDS = Number(process.env.IDLE_TIMEOUT_SECONDS || 3600);
@@ -36,6 +45,7 @@ const STATIC_FILES = new Set([
   'icon-192.png',
   'icon-512.png',
   'apple-touch-icon.png',
+  'sw.js',
 ]);
 
 function json(statusCode, body) {
@@ -119,6 +129,64 @@ async function handleStatus() {
   return json(200, { state: await getInstanceState() });
 }
 
+async function handleSubscribe(rawBody) {
+  let payload;
+  try {
+    payload = JSON.parse(rawBody || '{}');
+  } catch {
+    return json(400, { error: 'invalid body' });
+  }
+
+  const { user_id: userId, subscription } = payload;
+  if (typeof userId !== 'string' || !subscription?.endpoint) {
+    return json(400, { error: 'user_id and subscription are required' });
+  }
+
+  const { error } = await supabase.from('push_subscriptions').upsert(
+    { user_id: userId, endpoint: subscription.endpoint, keys_json: subscription },
+    { onConflict: 'endpoint' },
+  );
+  if (error) return json(500, { error: error.message });
+  return json(200, { ok: true });
+}
+
+async function handleNotifyReady(rawBody) {
+  let payload;
+  try {
+    payload = JSON.parse(rawBody || '{}');
+  } catch {
+    return json(400, { error: 'invalid body' });
+  }
+
+  const userId = payload.user_id;
+  if (typeof userId !== 'string') {
+    return json(400, { error: 'user_id is required' });
+  }
+
+  const { data, error } = await supabase
+    .from('push_subscriptions')
+    .select('endpoint, keys_json')
+    .eq('user_id', userId);
+  if (error) return json(500, { error: error.message });
+
+  const payloadStr = JSON.stringify({ title: 'Kully', body: 'Your server is ready — come chat.' });
+
+  await Promise.all(
+    (data ?? []).map(async (row) => {
+      try {
+        await webpush.sendNotification(row.keys_json, payloadStr);
+      } catch (err) {
+        // A 404/410 means the subscription is stale — drop it.
+        if (err.statusCode === 404 || err.statusCode === 410) {
+          await supabase.from('push_subscriptions').delete().eq('endpoint', row.endpoint);
+        }
+      }
+    }),
+  );
+
+  return json(200, { ok: true, notified: (data ?? []).length });
+}
+
 // EventBridge scheduled invocation — no HTTP fields on the event at all.
 async function handleIdleCheck() {
   const state = await getInstanceState();
@@ -171,6 +239,12 @@ export const handler = async (event) => {
     }
     if (method === 'GET' && reqPath === '/status') {
       return requireAuth(headers) ? await handleStatus() : json(401, { error: 'unauthorized' });
+    }
+    if (method === 'POST' && reqPath === '/push/subscribe') {
+      return requireAuth(headers) ? await handleSubscribe(body) : json(401, { error: 'unauthorized' });
+    }
+    if (method === 'POST' && reqPath === '/push/notify-ready') {
+      return requireAuth(headers) ? await handleNotifyReady(body) : json(401, { error: 'unauthorized' });
     }
 
     return json(404, { error: 'not found' });

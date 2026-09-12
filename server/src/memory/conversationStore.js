@@ -10,6 +10,34 @@ export async function createConversation(userId) {
   return data.id;
 }
 
+export async function setConversationTitle(conversationId, title) {
+  const { error } = await supabase
+    .from('conversations')
+    .update({ title, updated_at: new Date().toISOString() })
+    .eq('id', conversationId);
+  if (error) throw error;
+}
+
+export async function listConversations(userId) {
+  const { data, error } = await supabase
+    .from('conversations')
+    .select('id, title, created_at, updated_at')
+    .eq('user_id', userId)
+    .order('updated_at', { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+export async function getMessages(conversationId) {
+  const { data, error } = await supabase
+    .from('messages')
+    .select('role, content, agent, created_at')
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return data;
+}
+
 export async function insertMessage({ conversationId, role, content, agent = null }) {
   const { data, error } = await supabase
     .from('messages')

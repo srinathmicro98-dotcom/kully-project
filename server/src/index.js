@@ -4,6 +4,8 @@ import { config } from './config.js';
 import { healthRouter } from './routes/health.js';
 import { internalRouter } from './routes/internal.js';
 import { chatRouter } from './routes/chat.js';
+import { conversationsRouter } from './routes/conversations.js';
+import { agentsRouter } from './routes/agents.js';
 import { requireAuth } from './auth/requireAuth.js';
 import { touchActivity } from './activity.js';
 import { logger } from './utils/logger.js';
@@ -23,6 +25,8 @@ app.use((req, _res, next) => {
 app.use(healthRouter);
 app.use(internalRouter);
 app.use(requireAuth, chatRouter);
+app.use(requireAuth, conversationsRouter);
+app.use(requireAuth, agentsRouter);
 
 app.listen(config.port, '127.0.0.1', () => {
   logger.info(`Kully orchestrator listening on 127.0.0.1:${config.port}`);
