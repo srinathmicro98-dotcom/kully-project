@@ -12,7 +12,7 @@ export async function extractAndStoreFacts({ userId, userMessage, assistantReply
     const raw = await chatCompletion({
       model: MODELS.fast,
       temperature: 0,
-      maxTokens: 300,
+      maxTokens: 600,
       reasoningEffort: 'low',
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
@@ -20,7 +20,8 @@ export async function extractAndStoreFacts({ userId, userMessage, assistantReply
       ],
     });
 
-    const facts = JSON.parse(raw);
+    const jsonText = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
+    const facts = JSON.parse(jsonText);
     if (Array.isArray(facts) && facts.length) {
       await storeFacts({ userId, facts, sourceMessageId });
     }
