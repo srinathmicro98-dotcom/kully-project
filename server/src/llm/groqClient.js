@@ -27,3 +27,28 @@ export async function chatCompletion({
   });
   return res.choices[0]?.message?.content ?? '';
 }
+
+/**
+ * Like chatCompletion, but returns the full message (so callers can inspect
+ * `tool_calls`) and accepts a `tools` definition for function calling.
+ */
+export async function chatCompletionWithTools({
+  model,
+  messages,
+  tools,
+  temperature = 0.4,
+  maxTokens = 1024,
+  reasoningEffort = 'medium',
+}) {
+  const res = await groq.chat.completions.create({
+    model,
+    messages,
+    tools,
+    tool_choice: tools ? 'auto' : undefined,
+    temperature,
+    max_tokens: maxTokens,
+    reasoning_effort: reasoningEffort,
+    reasoning_format: 'hidden',
+  });
+  return res.choices[0]?.message;
+}

@@ -7,3 +7,5 @@ node_modules/
 # and function.zip is the deployment package, neither should be hand-edited.
 lambda/control-plane/public/
 lambda/control-plane/function.zip
+lambda/code-runner-node/function.zip
+lambda/code-runner-python/function.zip
