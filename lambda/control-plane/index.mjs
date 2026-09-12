@@ -23,7 +23,20 @@ const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'application/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
 };
+
+// The frontend the Lambda serves — same files lambda/deploy.sh copies into public/.
+const STATIC_FILES = new Set([
+  'index.html',
+  'app.js',
+  'style.css',
+  'manifest.json',
+  'icon-192.png',
+  'icon-512.png',
+  'apple-touch-icon.png',
+]);
 
 function json(statusCode, body) {
   return { statusCode, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
@@ -32,9 +45,15 @@ function json(statusCode, body) {
 function serveStatic(filename) {
   try {
     const filePath = path.join(__dirname, 'public', filename);
-    const body = fs.readFileSync(filePath, 'utf8');
     const ext = path.extname(filename);
-    return { statusCode: 200, headers: { 'Content-Type': MIME_TYPES[ext] || 'text/plain' }, body };
+    const isBinary = ext === '.png';
+    const raw = fs.readFileSync(filePath);
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': MIME_TYPES[ext] || 'text/plain' },
+      body: isBinary ? raw.toString('base64') : raw.toString('utf8'),
+      isBase64Encoded: isBinary,
+    };
   } catch {
     return json(404, { error: 'not found' });
   }
@@ -139,9 +158,8 @@ export const handler = async (event) => {
     : event.body;
 
   try {
-    if (method === 'GET' && (reqPath === '/' || reqPath === '/index.html')) return serveStatic('index.html');
-    if (method === 'GET' && reqPath === '/app.js') return serveStatic('app.js');
-    if (method === 'GET' && reqPath === '/style.css') return serveStatic('style.css');
+    if (method === 'GET' && reqPath === '/') return serveStatic('index.html');
+    if (method === 'GET' && STATIC_FILES.has(reqPath.slice(1))) return serveStatic(reqPath.slice(1));
 
     if (method === 'POST' && reqPath === '/auth/login') return await handleLogin(body);
 
