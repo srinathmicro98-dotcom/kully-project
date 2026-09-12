@@ -11,7 +11,10 @@ import {
 } from '@aws-sdk/client-ec2';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ec2 = new EC2Client({});
+// The EC2 instance lives in ap-south-2; this Lambda runs in ap-south-1
+// (ap-south-2 doesn't support Function URLs yet) — pin the region explicitly
+// rather than inheriting whatever region the Lambda itself deploys in.
+const ec2 = new EC2Client({ region: process.env.EC2_REGION || 'ap-south-2' });
 
 const INSTANCE_ID = process.env.INSTANCE_ID;
 const IDLE_TIMEOUT_SECONDS = Number(process.env.IDLE_TIMEOUT_SECONDS || 3600);
