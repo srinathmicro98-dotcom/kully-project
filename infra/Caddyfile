@@ -1,0 +1,12 @@
+kully-cofounder.duckdns.org {
+	handle /chat {
+		reverse_proxy 127.0.0.1:3000
+	}
+	handle /health {
+		reverse_proxy 127.0.0.1:3000
+	}
+	handle {
+		root * /home/ubuntu/kully/web
+		file_server
+	}
+}
