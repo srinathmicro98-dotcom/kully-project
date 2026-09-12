@@ -6,6 +6,9 @@ const required = [
   'SUPABASE_SERVICE_KEY',
   'COHERE_API_KEY',
   'TAVILY_API_KEY',
+  'AUTH_USERNAME',
+  'AUTH_PASSWORD_HASH',
+  'JWT_SECRET',
 ];
 
 for (const key of required) {
@@ -21,4 +24,7 @@ export const config = {
   supabaseServiceKey: process.env.SUPABASE_SERVICE_KEY,
   cohereApiKey: process.env.COHERE_API_KEY,
   tavilyApiKey: process.env.TAVILY_API_KEY,
+  authUsername: process.env.AUTH_USERNAME,
+  authPasswordHash: process.env.AUTH_PASSWORD_HASH,
+  jwtSecret: process.env.JWT_SECRET,
 };

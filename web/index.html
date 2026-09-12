@@ -7,10 +7,21 @@
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-<div id="app">
+<div id="login-screen">
+  <form id="login-form">
+    <h1>Kully</h1>
+    <input id="login-username" placeholder="Username" autocomplete="username" />
+    <input id="login-password" type="password" placeholder="Password" autocomplete="current-password" />
+    <button type="submit">Sign in</button>
+    <p id="login-error" class="error" hidden>Invalid username or password.</p>
+  </form>
+</div>
+
+<div id="app" hidden>
   <header>
     <h1>Kully</h1>
     <input id="serverUrl" placeholder="Server URL (e.g. https://kully-cofounder.duckdns.org)" />
+    <button id="signOut" type="button">Sign out</button>
   </header>
   <main id="messages"></main>
   <form id="composer">
