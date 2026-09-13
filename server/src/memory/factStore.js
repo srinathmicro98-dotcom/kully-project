@@ -1,7 +1,9 @@
 import { supabase } from './supabaseClient.js';
 import { embed, embedOne } from '../llm/embeddingsClient.js';
 
-export async function storeFacts({ userId, facts, sourceMessageId }) {
+const FACT_TYPES = new Set(['decision', 'todo', 'architecture', 'preference', 'other']);
+
+export async function storeFacts({ userId, project, facts, sourceMessageId }) {
   if (!facts.length) return;
 
   const vectors = await embed(
@@ -11,7 +13,10 @@ export async function storeFacts({ userId, facts, sourceMessageId }) {
 
   const rows = facts.map((f, i) => ({
     user_id: userId,
-    project: f.project ?? null,
+    // The conversation's own project context wins over the model's per-fact
+    // guess — it's the more reliable signal for which project this belongs to.
+    project: project ?? f.project ?? null,
+    fact_type: FACT_TYPES.has(f.fact_type) ? f.fact_type : 'other',
     content: f.content,
     embedding: vectors[i],
     source_message_id: sourceMessageId,
@@ -21,13 +26,14 @@ export async function storeFacts({ userId, facts, sourceMessageId }) {
   if (error) throw error;
 }
 
-export async function findRelevantFacts({ userId, query, matchCount = 5 }) {
+export async function findRelevantFacts({ userId, project, query, matchCount = 5 }) {
   const queryEmbedding = await embedOne(query, 'search_query');
 
   const { data, error } = await supabase.rpc('match_facts', {
     query_embedding: queryEmbedding,
     match_user_id: userId,
     match_count: matchCount,
+    match_project: project ?? null,
   });
   if (error) throw error;
   return data;

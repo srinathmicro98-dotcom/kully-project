@@ -3,11 +3,13 @@ import { storeFacts } from './factStore.js';
 import { logger } from '../utils/logger.js';
 
 const SYSTEM_PROMPT = `You extract durable facts worth remembering long-term from a single chat exchange \
-(e.g. the user's projects, goals, preferences, decisions). Ignore small talk or one-off questions.
-Reply with ONLY a JSON array, no prose. Each item: {"content": string, "project": string|null}.
+(e.g. the user's projects, goals, preferences, decisions, TODOs, architecture choices). Ignore small talk \
+or one-off questions.
+Reply with ONLY a JSON array, no prose. Each item: {"content": string, "fact_type": one of "decision", \
+"todo", "architecture", "preference", "other"}.
 If nothing is worth remembering, reply with [].`;
 
-export async function extractAndStoreFacts({ userId, userMessage, assistantReply, sourceMessageId }) {
+export async function extractAndStoreFacts({ userId, project, userMessage, assistantReply, sourceMessageId }) {
   try {
     const raw = await chatCompletion({
       model: MODELS.fast,
@@ -23,7 +25,7 @@ export async function extractAndStoreFacts({ userId, userMessage, assistantReply
     const jsonText = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
     const facts = JSON.parse(jsonText);
     if (Array.isArray(facts) && facts.length) {
-      await storeFacts({ userId, facts, sourceMessageId });
+      await storeFacts({ userId, project, facts, sourceMessageId });
     }
   } catch (err) {
     // Fact extraction is best-effort — never fail the user-facing request over it.

@@ -28,6 +28,7 @@
   <header>
     <button id="historyBtn" type="button" class="icon-btn" title="History">☰</button>
     <h1>Kully</h1>
+    <input id="projectInput" class="project-input" placeholder="project" title="Current project — scopes memory and the sandbox workspace" />
     <div class="controls">
       <button id="notifyBtn" type="button" class="ghost-btn" title="Notify me when ready">🔔</button>
       <button id="skillsBtn" type="button" class="ghost-btn" title="Skills">Skills</button>
@@ -57,7 +58,13 @@
       <h2>Skills</h2>
       <button type="button" class="closePanelBtn">✕</button>
     </div>
-    <div class="panel-body" id="skillsList"></div>
+    <div class="panel-body">
+      <h3 class="panel-section-title">Agent prompts</h3>
+      <div id="skillsList"></div>
+      <h3 class="panel-section-title">Skills library <span class="dim">— invokable by the dev agent</span></h3>
+      <div id="skillsLibraryList"></div>
+      <button type="button" id="newSkillBtn" class="ghost-btn">+ New skill</button>
+    </div>
   </div>
 </div>
 <script src="app.js"></script>

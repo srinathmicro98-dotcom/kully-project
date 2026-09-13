@@ -1,10 +1,11 @@
 /**
  * @typedef AgentContext
  * @property {string} userId
+ * @property {string} project
  * @property {string} conversationId
  * @property {string} message
  * @property {{role: string, content: string, agent?: string}[]} history
- * @property {{content: string, project?: string, similarity: number}[]} relevantFacts
+ * @property {{content: string, project?: string, fact_type?: string, similarity: number}[]} relevantFacts
  *
  * @typedef AgentResult
  * @property {string} reply
@@ -24,7 +25,9 @@ export function buildMessages({ systemPrompt, ctx, extra }) {
   const messages = [{ role: 'system', content: systemPrompt }];
 
   if (ctx.relevantFacts?.length) {
-    const factsBlock = ctx.relevantFacts.map((f) => `- ${f.content}`).join('\n');
+    const factsBlock = ctx.relevantFacts
+      .map((f) => `- [${f.fact_type || 'other'}] ${f.content}`)
+      .join('\n');
     messages.push({
       role: 'system',
       content: `Relevant things you remember about this user:\n${factsBlock}`,

@@ -25,6 +25,7 @@ create table facts (
   id uuid primary key default gen_random_uuid(),
   user_id text not null,
   project text,
+  fact_type text not null default 'other' check (fact_type in ('decision','todo','architecture','preference','other')),
   content text not null,
   embedding vector(1024),
   source_message_id uuid references messages(id) on delete set null,
@@ -56,15 +57,26 @@ create table push_subscriptions (
 );
 create index on push_subscriptions (user_id);
 
+create table skills (
+  name text primary key,
+  description text not null,
+  body text not null,
+  updated_at timestamptz not null default now()
+);
+
 create or replace function match_facts(
   query_embedding vector(1024),
   match_user_id text,
-  match_count int default 5
-) returns table (id uuid, content text, project text, similarity float)
+  match_count int default 5,
+  match_project text default null
+) returns table (id uuid, content text, project text, fact_type text, similarity float)
 language sql stable as $$
-  select id, content, project, 1 - (embedding <=> query_embedding) as similarity
+  select id, content, project, fact_type, 1 - (embedding <=> query_embedding) as similarity
   from facts
   where user_id = match_user_id and embedding is not null
-  order by embedding <=> query_embedding
+    and (match_project is null or project = match_project or project is null)
+  order by
+    case when match_project is not null and project = match_project then 0 else 1 end,
+    embedding <=> query_embedding
   limit match_count;
 $$;

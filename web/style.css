@@ -88,6 +88,16 @@ header h1 {
   flex: 1;
 }
 
+.project-input {
+  width: 110px;
+  background: var(--panel);
+  border: 1px solid #262b36;
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
 .controls {
   display: flex;
   gap: 8px;
@@ -226,6 +236,44 @@ header button {
   color: #6ee7a0;
   font-size: 12px;
   margin-left: 8px;
+}
+
+.panel-section-title {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--muted);
+  margin: 20px 0 10px;
+}
+.panel-section-title:first-child { margin-top: 0; }
+.panel-section-title .dim { text-transform: none; font-weight: normal; letter-spacing: 0; }
+
+.skill-item input[type="text"] {
+  width: 100%;
+  background: var(--panel);
+  border: 1px solid #262b36;
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.skill-item .row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.skill-item .deleteBtn {
+  background: transparent;
+  border: 1px solid #262b36;
+  color: #ff8a8a;
+}
+
+#newSkillBtn {
+  margin-top: 4px;
 }
 
 #banner {

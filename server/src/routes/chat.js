@@ -15,7 +15,12 @@ import { logger } from '../utils/logger.js';
 export const chatRouter = Router();
 
 chatRouter.post('/chat', async (req, res) => {
-  const { user_id: userId, conversation_id: bodyConversationId, message } = req.body ?? {};
+  const {
+    user_id: userId,
+    conversation_id: bodyConversationId,
+    project: rawProject,
+    message,
+  } = req.body ?? {};
 
   if (!userId || typeof userId !== 'string') {
     return res.status(400).json({ error: 'user_id is required' });
@@ -23,6 +28,7 @@ chatRouter.post('/chat', async (req, res) => {
   if (!message || typeof message !== 'string') {
     return res.status(400).json({ error: 'message is required' });
   }
+  const project = typeof rawProject === 'string' && rawProject.trim() ? rawProject.trim() : 'default';
 
   try {
     const isNewConversation = !bodyConversationId;
@@ -37,7 +43,7 @@ chatRouter.post('/chat', async (req, res) => {
 
     let relevantFacts = [];
     try {
-      relevantFacts = await findRelevantFacts({ userId, query: message });
+      relevantFacts = await findRelevantFacts({ userId, project, query: message });
     } catch (err) {
       logger.warn('fact recall skipped:', err.message);
     }
@@ -48,6 +54,7 @@ chatRouter.post('/chat', async (req, res) => {
     const agent = agents[agentName];
     const { reply } = await agent.handle({
       userId,
+      project,
       conversationId,
       message,
       history,
@@ -63,6 +70,7 @@ chatRouter.post('/chat', async (req, res) => {
 
     await extractAndStoreFacts({
       userId,
+      project,
       userMessage: message,
       assistantReply: reply,
       sourceMessageId: assistantMessageId,

@@ -1,6 +1,6 @@
-# Ephemeral, isolated code execution for the dev agent's "run_code" tool.
-# This function's IAM role can ONLY read/write/list the one S3 workspace
-# bucket -- no access to Kully's Supabase/Groq/AWS-control secrets at all.
+# Ephemeral, isolated code execution for the dev agent's tools. This
+# function's IAM role can ONLY read/write/list the one S3 workspace bucket --
+# no access to Kully's Supabase/Groq/AWS-control secrets at all.
 import base64
 import json
 import os
@@ -27,12 +27,15 @@ def response(status_code, body):
     }
 
 
-def download_workspace(user_id):
+def prefix_for(user_id, project):
+    return f"{user_id}/{project or 'default'}/"
+
+
+def download_workspace(prefix):
     if os.path.exists(WORKDIR):
         shutil.rmtree(WORKDIR)
     os.makedirs(WORKDIR, exist_ok=True)
 
-    prefix = f"{user_id}/"
     paginator = s3.get_paginator("list_objects_v2")
     for page in paginator.paginate(Bucket=BUCKET, Prefix=prefix):
         for obj in page.get("Contents", []):
@@ -44,13 +47,88 @@ def download_workspace(user_id):
             s3.download_file(BUCKET, obj["Key"], dest)
 
 
-def upload_workspace(user_id):
-    prefix = f"{user_id}/"
+def upload_workspace(prefix):
     for root, _dirs, files in os.walk(WORKDIR):
         for name in files:
             full = os.path.join(root, name)
             rel = os.path.relpath(full, WORKDIR).replace(os.sep, "/")
             s3.upload_file(full, BUCKET, prefix + rel)
+
+
+def resolve_in_workdir(rel_path):
+    resolved = os.path.abspath(os.path.join(WORKDIR, rel_path))
+    if not resolved.startswith(os.path.abspath(WORKDIR)):
+        raise ValueError("path escapes the workspace")
+    return resolved
+
+
+def list_files():
+    if not os.path.exists(WORKDIR):
+        return {"files": []}
+    files = []
+    for root, _dirs, names in os.walk(WORKDIR):
+        for name in names:
+            full = os.path.join(root, name)
+            files.append(os.path.relpath(full, WORKDIR).replace(os.sep, "/"))
+    return {"files": files}
+
+
+def do_run(code):
+    with open(os.path.join(WORKDIR, "main.py"), "w") as f:
+        f.write(code)
+    try:
+        result = subprocess.run(
+            ["python3", "main.py"], cwd=WORKDIR, timeout=10, capture_output=True, text=True,
+        )
+        return {
+            "stdout": truncate(result.stdout),
+            "stderr": truncate(result.stderr),
+            "exitCode": result.returncode,
+            "timedOut": False,
+        }
+    except subprocess.TimeoutExpired as e:
+        return {
+            "stdout": truncate(e.stdout or ""),
+            "stderr": truncate((e.stderr or "") + "\nExecution timed out."),
+            "exitCode": 1,
+            "timedOut": True,
+        }
+
+
+def do_run_shell(command):
+    try:
+        result = subprocess.run(
+            command, shell=True, cwd=WORKDIR, timeout=10, capture_output=True, text=True,
+        )
+        return {
+            "stdout": truncate(result.stdout),
+            "stderr": truncate(result.stderr),
+            "exitCode": result.returncode,
+            "timedOut": False,
+        }
+    except subprocess.TimeoutExpired as e:
+        return {
+            "stdout": truncate(e.stdout or ""),
+            "stderr": truncate((e.stderr or "") + "\nExecution timed out."),
+            "exitCode": 1,
+            "timedOut": True,
+        }
+
+
+def do_read_file(rel_path):
+    full = resolve_in_workdir(rel_path)
+    if not os.path.exists(full):
+        return {"error": f"no such file: {rel_path}"}
+    with open(full, "r") as f:
+        return {"content": truncate(f.read())}
+
+
+def do_write_file(rel_path, content):
+    full = resolve_in_workdir(rel_path)
+    os.makedirs(os.path.dirname(full), exist_ok=True)
+    with open(full, "w") as f:
+        f.write(content or "")
+    return {"ok": True}
 
 
 def lambda_handler(event, _context):
@@ -67,39 +145,43 @@ def lambda_handler(event, _context):
     except Exception:
         return response(400, {"error": "invalid body"})
 
-    code = payload.get("code")
+    action = payload.get("action", "run")
     user_id = payload.get("user_id")
-    if not isinstance(code, str) or not isinstance(user_id, str):
-        return response(400, {"error": "code and user_id are required"})
+    project = payload.get("project")
+    if not isinstance(user_id, str):
+        return response(400, {"error": "user_id is required"})
+
+    prefix = prefix_for(user_id, project)
 
     try:
-        download_workspace(user_id)
-        with open(os.path.join(WORKDIR, "main.py"), "w") as f:
-            f.write(code)
+        download_workspace(prefix)
 
-        timed_out = False
-        try:
-            result = subprocess.run(
-                ["python3", "main.py"],
-                cwd=WORKDIR,
-                timeout=10,
-                capture_output=True,
-                text=True,
-            )
-            stdout, stderr, exit_code = result.stdout, result.stderr, result.returncode
-        except subprocess.TimeoutExpired as e:
-            stdout = e.stdout or ""
-            stderr = (e.stderr or "") + "\nExecution timed out."
-            exit_code = 1
-            timed_out = True
+        if action == "run":
+            code = payload.get("code")
+            if not isinstance(code, str):
+                return response(400, {"error": "code is required for action=run"})
+            result = do_run(code)
+        elif action == "run_shell":
+            command = payload.get("command")
+            if not isinstance(command, str):
+                return response(400, {"error": "command is required for action=run_shell"})
+            result = do_run_shell(command)
+        elif action == "read_file":
+            rel_path = payload.get("path")
+            if not isinstance(rel_path, str):
+                return response(400, {"error": "path is required for action=read_file"})
+            result = do_read_file(rel_path)
+        elif action == "write_file":
+            rel_path = payload.get("path")
+            if not isinstance(rel_path, str):
+                return response(400, {"error": "path is required for action=write_file"})
+            result = do_write_file(rel_path, payload.get("content"))
+        elif action == "list_files":
+            result = list_files()
+        else:
+            return response(400, {"error": f"unknown action: {action}"})
 
-        upload_workspace(user_id)
-
-        return response(200, {
-            "stdout": truncate(stdout),
-            "stderr": truncate(stderr),
-            "exitCode": exit_code,
-            "timedOut": timed_out,
-        })
+        upload_workspace(prefix)
+        return response(200, result)
     except Exception as e:
         return response(500, {"error": str(e)})

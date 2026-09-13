@@ -22,13 +22,23 @@ const historyList = document.getElementById('historyList');
 const skillsBtn = document.getElementById('skillsBtn');
 const skillsPanel = document.getElementById('skillsPanel');
 const skillsList = document.getElementById('skillsList');
+const skillsLibraryList = document.getElementById('skillsLibraryList');
+const newSkillBtn = document.getElementById('newSkillBtn');
 const notifyBtn = document.getElementById('notifyBtn');
+const projectInput = document.getElementById('projectInput');
 
 const state = {
   userId: 'default-user',
+  project: localStorage.getItem('kully_project') || 'default',
   conversationId: null,
   token: localStorage.getItem('kully_token') || null,
 };
+
+projectInput.value = state.project;
+projectInput.addEventListener('change', () => {
+  state.project = projectInput.value.trim() || 'default';
+  localStorage.setItem('kully_project', state.project);
+});
 
 let healthPollTimer = null;
 let notifiedThisConnect = false;
@@ -201,6 +211,7 @@ composer.addEventListener('submit', async (e) => {
       },
       body: JSON.stringify({
         user_id: state.userId,
+        project: state.project,
         conversation_id: state.conversationId,
         message,
       }),
@@ -354,6 +365,104 @@ async function loadSkills() {
 skillsBtn.addEventListener('click', () => {
   openPanel(skillsPanel);
   loadSkills();
+  loadSkillsLibrary();
+});
+
+// ---- Skills library (invokable skills, not just agent prompts) ----
+
+function renderSkillEntry({ name, description, body }, { isNew = false } = {}) {
+  const item = document.createElement('div');
+  item.className = 'skill-item';
+
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.placeholder = 'skill-name (e.g. api-design)';
+  nameInput.value = name || '';
+  nameInput.disabled = !isNew; // the name is the primary key — don't let it change once created
+
+  const descInput = document.createElement('input');
+  descInput.type = 'text';
+  descInput.placeholder = 'When should the dev agent use this?';
+  descInput.value = description || '';
+
+  const bodyArea = document.createElement('textarea');
+  bodyArea.placeholder = 'Full instructions the agent sees once it invokes this skill.';
+  bodyArea.value = body || '';
+
+  const row = document.createElement('div');
+  row.className = 'row';
+  const saveBtn = document.createElement('button');
+  saveBtn.type = 'button';
+  saveBtn.textContent = isNew ? 'Create' : 'Save';
+  const savedTag = document.createElement('span');
+  savedTag.className = 'saved';
+  savedTag.textContent = 'Saved ✓';
+  savedTag.hidden = true;
+  row.appendChild(saveBtn);
+  row.appendChild(savedTag);
+
+  if (!isNew) {
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'deleteBtn';
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.addEventListener('click', async () => {
+      if (!confirm(`Delete skill "${name}"?`)) return;
+      try {
+        const res = await controlFetch(`${CHAT_URL}/skills/${encodeURIComponent(name)}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error(`status ${res.status}`);
+        item.remove();
+      } catch (err) {
+        alert(`Could not delete: ${err.message}`);
+      }
+    });
+    row.appendChild(deleteBtn);
+  }
+
+  saveBtn.addEventListener('click', async () => {
+    const skillName = nameInput.value.trim();
+    if (!skillName) return alert('Name is required.');
+    savedTag.hidden = true;
+    try {
+      const res = await controlFetch(`${CHAT_URL}/skills/${encodeURIComponent(skillName)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: descInput.value, body: bodyArea.value }),
+      });
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      savedTag.hidden = false;
+      setTimeout(() => (savedTag.hidden = true), 3000);
+      if (isNew) loadSkillsLibrary();
+    } catch (err) {
+      alert(`Could not save: ${err.message}`);
+    }
+  });
+
+  item.appendChild(nameInput);
+  item.appendChild(descInput);
+  item.appendChild(bodyArea);
+  item.appendChild(row);
+  return item;
+}
+
+async function loadSkillsLibrary() {
+  skillsLibraryList.textContent = 'Loading…';
+  try {
+    const res = await controlFetch(`${CHAT_URL}/skills`);
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const skills = await res.json();
+
+    skillsLibraryList.innerHTML = '';
+    for (const skill of skills) {
+      skillsLibraryList.appendChild(renderSkillEntry(skill));
+    }
+  } catch (err) {
+    skillsLibraryList.textContent = `Could not load skills library: ${err.message}. Is your server connected?`;
+  }
+}
+
+newSkillBtn.addEventListener('click', () => {
+  skillsLibraryList.appendChild(renderSkillEntry({}, { isNew: true }));
 });
 
 // ---- Push notifications ----
