@@ -31,4 +31,11 @@ export const config = {
   codeRunnerSecret: process.env.CODE_RUNNER_SECRET,
   codeRunnerNodeUrl: process.env.CODE_RUNNER_NODE_URL,
   codeRunnerPythonUrl: process.env.CODE_RUNNER_PYTHON_URL,
+  // Optional: GitHub integration for the dev agent. Absent = tools disabled,
+  // not a boot failure — this isn't core to the app running.
+  githubToken: process.env.GITHUB_TOKEN || null,
+  githubAllowedRepos: (process.env.GITHUB_ALLOWED_REPOS || '')
+    .split(',')
+    .map((r) => r.trim())
+    .filter(Boolean),
 };
