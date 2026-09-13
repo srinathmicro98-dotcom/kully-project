@@ -13,8 +13,8 @@ export const SCRAPE_TOOL = {
       properties: {
         url: { type: 'string' },
         selector: {
-          type: 'string',
-          description: 'Optional CSS selector (e.g. "article p", "table.results td") to extract specific elements instead of the whole page text.',
+          type: ['string', 'null'],
+          description: 'Optional CSS selector (e.g. "article p", "table.results td") to extract specific elements instead of the whole page text. Pass null to omit.',
         },
       },
       required: ['url'],
