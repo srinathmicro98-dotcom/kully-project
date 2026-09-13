@@ -1,9 +1,9 @@
 import { supabase } from './supabaseClient.js';
 
-export async function createConversation(userId) {
+export async function createConversation(userId, project = 'default') {
   const { data, error } = await supabase
     .from('conversations')
-    .insert({ user_id: userId })
+    .insert({ user_id: userId, project })
     .select('id')
     .single();
   if (error) throw error;
@@ -21,11 +21,30 @@ export async function setConversationTitle(conversationId, title) {
 export async function listConversations(userId) {
   const { data, error } = await supabase
     .from('conversations')
-    .select('id, title, created_at, updated_at')
+    .select('id, project, title, created_at, updated_at')
     .eq('user_id', userId)
     .order('updated_at', { ascending: false });
   if (error) throw error;
   return data;
+}
+
+// One row per project this user has ever used, with a conversation count and
+// when it was last touched — powers the Projects panel.
+export async function listProjects(userId) {
+  const { data, error } = await supabase
+    .from('conversations')
+    .select('project, updated_at')
+    .eq('user_id', userId);
+  if (error) throw error;
+
+  const byProject = new Map();
+  for (const row of data) {
+    const entry = byProject.get(row.project) ?? { project: row.project, conversationCount: 0, lastUsed: row.updated_at };
+    entry.conversationCount += 1;
+    if (row.updated_at > entry.lastUsed) entry.lastUsed = row.updated_at;
+    byProject.set(row.project, entry);
+  }
+  return [...byProject.values()].sort((a, b) => (a.lastUsed < b.lastUsed ? 1 : -1));
 }
 
 export async function getMessages(conversationId) {

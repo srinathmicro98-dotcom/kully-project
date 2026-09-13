@@ -26,6 +26,11 @@ const skillsLibraryList = document.getElementById('skillsLibraryList');
 const newSkillBtn = document.getElementById('newSkillBtn');
 const notifyBtn = document.getElementById('notifyBtn');
 const projectInput = document.getElementById('projectInput');
+const projectsBtn = document.getElementById('projectsBtn');
+const projectsPanel = document.getElementById('projectsPanel');
+const projectsList = document.getElementById('projectsList');
+const memoryProjectName = document.getElementById('memoryProjectName');
+const projectFactsList = document.getElementById('projectFactsList');
 
 const state = {
   userId: 'default-user',
@@ -229,15 +234,14 @@ composer.addEventListener('submit', async (e) => {
 
 // ---- History panel ----
 
+const ALL_PANELS = [historyPanel, skillsPanel, projectsPanel];
+
 function openPanel(panel) {
-  historyPanel.hidden = panel !== historyPanel;
-  skillsPanel.hidden = panel !== skillsPanel;
-  panel.hidden = false;
+  for (const p of ALL_PANELS) p.hidden = p !== panel;
 }
 
 function closePanels() {
-  historyPanel.hidden = true;
-  skillsPanel.hidden = true;
+  for (const p of ALL_PANELS) p.hidden = true;
 }
 
 document.querySelectorAll('.closePanelBtn').forEach((btn) => btn.addEventListener('click', closePanels));
@@ -463,6 +467,92 @@ async function loadSkillsLibrary() {
 
 newSkillBtn.addEventListener('click', () => {
   skillsLibraryList.appendChild(renderSkillEntry({}, { isNew: true }));
+});
+
+// ---- Projects panel ----
+
+function switchProject(project) {
+  state.project = project;
+  projectInput.value = project;
+  localStorage.setItem('kully_project', project);
+  loadProjectFacts(project);
+  // Re-render the active state without a full reload.
+  projectsList.querySelectorAll('.project-item').forEach((el) => {
+    el.classList.toggle('active', el.dataset.project === project);
+  });
+}
+
+async function loadProjectFacts(project) {
+  memoryProjectName.textContent = project;
+  projectFactsList.textContent = 'Loading…';
+  try {
+    const res = await controlFetch(`${CHAT_URL}/projects/${encodeURIComponent(project)}/facts?user_id=${encodeURIComponent(state.userId)}`);
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const facts = await res.json();
+
+    projectFactsList.innerHTML = '';
+    if (!facts.length) {
+      projectFactsList.textContent = 'Nothing remembered for this project yet.';
+      return;
+    }
+    for (const fact of facts) {
+      const item = document.createElement('div');
+      item.className = 'fact-item';
+      const typeTag = document.createElement('span');
+      typeTag.className = 'fact-type';
+      typeTag.textContent = fact.fact_type;
+      item.appendChild(typeTag);
+      item.appendChild(document.createTextNode(fact.content));
+      projectFactsList.appendChild(item);
+    }
+  } catch (err) {
+    projectFactsList.textContent = `Could not load memory: ${err.message}. Is your server connected?`;
+  }
+}
+
+async function loadProjects() {
+  projectsList.textContent = 'Loading…';
+  try {
+    const res = await controlFetch(`${CHAT_URL}/projects?user_id=${encodeURIComponent(state.userId)}`);
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const projects = await res.json();
+
+    projectsList.innerHTML = '';
+    if (!projects.some((p) => p.project === state.project)) {
+      // The current project (e.g. freshly typed, no conversations yet) still
+      // deserves a row so it's obvious it'll be the one used.
+      projects.unshift({ project: state.project, conversationCount: 0, lastUsed: null });
+    }
+    for (const p of projects) {
+      const item = document.createElement('div');
+      item.className = 'project-item';
+      if (p.project === state.project) item.classList.add('active');
+      item.dataset.project = p.project;
+
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = p.project;
+
+      const meta = document.createElement('span');
+      meta.className = 'meta';
+      meta.textContent = p.lastUsed
+        ? `${p.conversationCount} chat${p.conversationCount === 1 ? '' : 's'} · ${formatRelativeDate(p.lastUsed)}`
+        : 'new';
+
+      item.appendChild(name);
+      item.appendChild(meta);
+      item.addEventListener('click', () => switchProject(p.project));
+      projectsList.appendChild(item);
+    }
+  } catch (err) {
+    projectsList.textContent = `Could not load projects: ${err.message}. Is your server connected?`;
+  }
+}
+
+projectsBtn.addEventListener('click', () => {
+  openPanel(projectsPanel);
+  loadProjects();
+  loadProjectFacts(state.project);
 });
 
 // ---- Push notifications ----

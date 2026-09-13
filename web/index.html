@@ -31,6 +31,7 @@
     <input id="projectInput" class="project-input" placeholder="project" title="Current project — scopes memory and the sandbox workspace" />
     <div class="controls">
       <button id="notifyBtn" type="button" class="ghost-btn" title="Notify me when ready">🔔</button>
+      <button id="projectsBtn" type="button" class="ghost-btn" title="Projects">Projects</button>
       <button id="skillsBtn" type="button" class="ghost-btn" title="Skills">Skills</button>
       <button id="connectBtn" type="button">Connect</button>
       <button id="disconnectBtn" type="button" hidden>Disconnect</button>
@@ -51,6 +52,19 @@
       <button type="button" class="closePanelBtn">✕</button>
     </div>
     <div class="panel-body" id="historyList"></div>
+  </div>
+
+  <div id="projectsPanel" class="panel" hidden>
+    <div class="panel-header">
+      <h2>Projects</h2>
+      <button type="button" class="closePanelBtn">✕</button>
+    </div>
+    <div class="panel-body">
+      <h3 class="panel-section-title">Your projects <span class="dim">— tap one to switch to it</span></h3>
+      <div id="projectsList"></div>
+      <h3 class="panel-section-title">Memory for <span id="memoryProjectName" class="dim"></span></h3>
+      <div id="projectFactsList"></div>
+    </div>
   </div>
 
   <div id="skillsPanel" class="panel" hidden>

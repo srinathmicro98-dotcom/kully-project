@@ -1,9 +1,10 @@
-import { chatCompletionWithTools, MODELS } from '../../llm/groqClient.js';
 import { buildMessages } from './agentInterface.js';
+import { runToolLoop } from './toolLoop.js';
 import { getSystemPrompt } from '../../memory/agentConfigStore.js';
 import { listSkillsMenu, getSkillBody } from '../../memory/skillStore.js';
 import { callCodeRunner } from '../../llm/codeRunnerClient.js';
 import { githubReadFile, githubWriteFile, githubListFiles, githubCreatePullRequest } from '../../llm/githubClient.js';
+import { SCRAPE_TOOL, handleScrapeTool } from './sharedTools.js';
 import { config } from '../../config.js';
 import { logger } from '../../utils/logger.js';
 
@@ -12,12 +13,17 @@ export const name = 'dev';
 const GITHUB_ENABLED = !!config.githubToken;
 
 export const DEFAULT_SYSTEM_PROMPT = `You are the dev/build specialist on the user's AI cofounder team. \
-You help with code, debugging, architecture, and technical build decisions. Be concrete and \
-give runnable code or exact commands where relevant. Keep answers focused, not padded. \
+You help with code, debugging, architecture, and technical build decisions — including scaffolding and \
+building complete small applications, not just snippets. Be concrete and give runnable code or exact \
+commands where relevant. Keep answers focused, not padded. \
 You have real tools — run_code, read_file, write_file, list_files, run_shell — that operate in a \
-sandboxed workspace persisting across turns for this user's current project. Use them whenever \
-running/inspecting real code would give a more reliable answer than reasoning about it, instead of \
-just describing what the code would do. Use use_skill when a listed skill matches what's being asked.${
+sandboxed workspace persisting across turns for this user's current project. The sandbox supports real \
+dependency installs (npm install, pip install) and can run test suites/builds — dependency directories \
+(node_modules, .venv, etc.) don't persist between calls, so install them again within the same run_shell \
+call that needs them (e.g. "npm install && npm test"). Use these tools whenever running/inspecting real \
+code would give a more reliable answer than reasoning about it, instead of just describing what the code \
+would do. Use scrape_url to look up real documentation or examples from the web when useful. Use use_skill \
+when a listed skill matches what's being asked.${
   GITHUB_ENABLED
     ? ' You also have github_read_file, github_write_file, github_list_files, and github_create_pr for ' +
       'working against a real GitHub repo (owner/repo the user names). You can NEVER write directly to ' +
@@ -48,7 +54,9 @@ const TOOLS = [
     type: 'function',
     function: {
       name: 'run_shell',
-      description: 'Run a shell command in the sandbox workspace (e.g. wc -l file.py, ls -la, node -v).',
+      description:
+        'Run a shell command in the sandbox workspace — e.g. "npm install && npm test", ' +
+        '"pip install -r requirements.txt && pytest", wc -l file.py, ls -la.',
       parameters: {
         type: 'object',
         properties: {
@@ -116,6 +124,7 @@ const TOOLS = [
       },
     },
   },
+  SCRAPE_TOOL,
   ...(GITHUB_ENABLED
     ? [
         {
@@ -195,9 +204,7 @@ const TOOLS = [
     : []),
 ];
 
-const MAX_TOOL_ITERATIONS = 4;
-
-async function runTool(call, ctx) {
+async function dispatch(call, ctx) {
   const args = JSON.parse(call.function.arguments);
 
   switch (call.function.name) {
@@ -215,6 +222,8 @@ async function runTool(call, ctx) {
       const body = await getSkillBody(args.name);
       return body ? { skill: args.name, instructions: body } : { error: `no such skill: ${args.name}` };
     }
+    case 'scrape_url':
+      return handleScrapeTool(args);
     case 'github_read_file':
       return githubReadFile(args);
     case 'github_list_files':
@@ -247,33 +256,6 @@ export async function handle(ctx) {
   const systemPrompt = basePrompt + skillsMenuText;
   const messages = buildMessages({ systemPrompt, ctx });
 
-  for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
-    const message = await chatCompletionWithTools({
-      model: MODELS.smart,
-      messages,
-      tools: TOOLS,
-      temperature: 0.4,
-    });
-
-    if (!message.tool_calls?.length) {
-      return { reply: message.content ?? '' };
-    }
-
-    messages.push({ role: 'assistant', content: message.content ?? '', tool_calls: message.tool_calls });
-
-    for (const call of message.tool_calls) {
-      let result;
-      try {
-        result = await runTool(call, ctx);
-      } catch (err) {
-        logger.warn(`${call.function.name} tool failed:`, err.message);
-        result = { error: err.message };
-      }
-      messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result) });
-    }
-  }
-
-  // Exhausted the loop without a final answer — force one last reply, no tools offered.
-  const finalMessage = await chatCompletionWithTools({ model: MODELS.smart, messages, temperature: 0.4 });
-  return { reply: finalMessage.content || "I ran out of tool-call turns — here's what I found so far." };
+  const reply = await runToolLoop({ messages, tools: TOOLS, dispatch: (call) => dispatch(call, ctx) });
+  return { reply };
 }

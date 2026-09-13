@@ -6,10 +6,12 @@ create extension if not exists pgcrypto;
 create table conversations (
   id uuid primary key default gen_random_uuid(),
   user_id text not null,
+  project text not null default 'default',
   title text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+create index conversations_user_project_idx on conversations (user_id, project);
 
 create table messages (
   id uuid primary key default gen_random_uuid(),

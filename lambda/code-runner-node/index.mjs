@@ -10,6 +10,18 @@ const s3 = new S3Client({});
 const BUCKET = process.env.WORKSPACE_BUCKET;
 const WORKDIR = '/tmp/workspace';
 const MAX_OUTPUT = 4000;
+const EXEC_TIMEOUT_MS = 100_000; // Lambda's own timeout is set higher, leaving headroom for S3 sync.
+
+// Dependency/vendor/VCS directories are never synced to/from S3 — with real
+// npm/pip installs these can be thousands of small files, which would blow
+// past any timeout doing one-at-a-time S3 calls. Reinstall them per call
+// instead (e.g. `npm install && npm test` in one run_shell) rather than
+// trying to persist them.
+const EXCLUDE_DIRS = new Set(['node_modules', '.git', '__pycache__', '.venv', 'venv', 'dist', 'build', '.next', '.cache']);
+
+function isExcluded(relPath) {
+  return relPath.split('/').some((seg) => EXCLUDE_DIRS.has(seg));
+}
 
 function json(statusCode, body) {
   return { statusCode, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
@@ -19,10 +31,10 @@ function truncate(s) {
   return s.length > MAX_OUTPUT ? `${s.slice(0, MAX_OUTPUT)}\n… (truncated)` : s;
 }
 
-async function streamToString(stream) {
+async function streamToBuffer(stream) {
   const chunks = [];
   for await (const chunk of stream) chunks.push(chunk);
-  return Buffer.concat(chunks).toString('utf8');
+  return Buffer.concat(chunks);
 }
 
 function prefixFor(userId, project) {
@@ -34,28 +46,39 @@ async function downloadWorkspace(prefix) {
   fs.mkdirSync(WORKDIR, { recursive: true });
 
   const list = await s3.send(new ListObjectsV2Command({ Bucket: BUCKET, Prefix: prefix }));
-  for (const obj of list.Contents ?? []) {
+  const objects = (list.Contents ?? []).filter((obj) => {
     const rel = obj.Key.slice(prefix.length);
-    if (!rel) continue;
-    const dest = path.join(WORKDIR, rel);
-    fs.mkdirSync(path.dirname(dest), { recursive: true });
-    const got = await s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: obj.Key }));
-    fs.writeFileSync(dest, await streamToString(got.Body));
-  }
+    return rel && !isExcluded(rel);
+  });
+
+  await Promise.all(
+    objects.map(async (obj) => {
+      const rel = obj.Key.slice(prefix.length);
+      const dest = path.join(WORKDIR, rel);
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      const got = await s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: obj.Key }));
+      fs.writeFileSync(dest, await streamToBuffer(got.Body));
+    }),
+  );
 }
 
-function walk(dir) {
+function walk(dir, base = dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const full = path.join(dir, entry.name);
-    return entry.isDirectory() ? walk(full) : [full];
+    const rel = path.relative(base, full).replace(/\\/g, '/');
+    if (isExcluded(rel)) return [];
+    return entry.isDirectory() ? walk(full, base) : [full];
   });
 }
 
 async function uploadWorkspace(prefix) {
-  for (const file of walk(WORKDIR)) {
-    const rel = path.relative(WORKDIR, file).replace(/\\/g, '/');
-    await s3.send(new PutObjectCommand({ Bucket: BUCKET, Key: prefix + rel, Body: fs.readFileSync(file) }));
-  }
+  const files = fs.existsSync(WORKDIR) ? walk(WORKDIR) : [];
+  await Promise.all(
+    files.map((file) => {
+      const rel = path.relative(WORKDIR, file).replace(/\\/g, '/');
+      return s3.send(new PutObjectCommand({ Bucket: BUCKET, Key: prefix + rel, Body: fs.readFileSync(file) }));
+    }),
+  );
 }
 
 function resolveInWorkdir(relPath) {
@@ -66,14 +89,19 @@ function resolveInWorkdir(relPath) {
   return resolved;
 }
 
+// npm (and some other tools) need a writable HOME to write their own config/
+// cache/logs — the Lambda execution user's real home isn't writable.
+const SANDBOX_ENV = { ...process.env, HOME: '/tmp' };
+
 function doRun(code) {
   fs.writeFileSync(path.join(WORKDIR, 'main.js'), code);
   try {
     const stdout = execFileSync('node', ['main.js'], {
       cwd: WORKDIR,
-      timeout: 10000,
+      timeout: EXEC_TIMEOUT_MS,
       encoding: 'utf8',
       maxBuffer: 10 * 1024 * 1024,
+      env: SANDBOX_ENV,
     });
     return { stdout: truncate(stdout), stderr: '', exitCode: 0, timedOut: false };
   } catch (err) {
@@ -90,9 +118,10 @@ function doRunShell(command) {
   try {
     const stdout = execFileSync('/bin/sh', ['-c', command], {
       cwd: WORKDIR,
-      timeout: 10000,
+      timeout: EXEC_TIMEOUT_MS,
       encoding: 'utf8',
       maxBuffer: 10 * 1024 * 1024,
+      env: SANDBOX_ENV,
     });
     return { stdout: truncate(stdout), stderr: '', exitCode: 0, timedOut: false };
   } catch (err) {

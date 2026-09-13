@@ -32,7 +32,7 @@ chatRouter.post('/chat', async (req, res) => {
 
   try {
     const isNewConversation = !bodyConversationId;
-    const conversationId = bodyConversationId || (await createConversation(userId));
+    const conversationId = bodyConversationId || (await createConversation(userId, project));
 
     const userMessageId = await insertMessage({ conversationId, role: 'user', content: message });
     if (isNewConversation) {

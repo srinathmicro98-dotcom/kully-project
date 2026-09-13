@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 
 import boto3
 
@@ -13,6 +14,18 @@ s3 = boto3.client("s3")
 BUCKET = os.environ["WORKSPACE_BUCKET"]
 WORKDIR = "/tmp/workspace"
 MAX_OUTPUT = 4000
+EXEC_TIMEOUT_SECONDS = 100  # Lambda's own timeout is set higher, leaving headroom for S3 sync.
+
+# Dependency/vendor/VCS directories are never synced to/from S3 -- with real
+# pip/npm installs these can be thousands of small files, which would blow
+# past any timeout doing one-at-a-time S3 calls. Reinstall them per call
+# instead (e.g. "pip install -r requirements.txt && pytest" in one
+# run_shell) rather than trying to persist them.
+EXCLUDE_DIRS = {"node_modules", ".git", "__pycache__", ".venv", "venv", "dist", "build", ".next", ".cache"}
+
+
+def is_excluded(rel_path):
+    return any(seg in EXCLUDE_DIRS for seg in rel_path.split("/"))
 
 
 def truncate(s):
@@ -36,23 +49,39 @@ def download_workspace(prefix):
         shutil.rmtree(WORKDIR)
     os.makedirs(WORKDIR, exist_ok=True)
 
+    keys = []
     paginator = s3.get_paginator("list_objects_v2")
     for page in paginator.paginate(Bucket=BUCKET, Prefix=prefix):
         for obj in page.get("Contents", []):
             rel = obj["Key"][len(prefix):]
-            if not rel:
-                continue
-            dest = os.path.join(WORKDIR, rel)
-            os.makedirs(os.path.dirname(dest), exist_ok=True)
-            s3.download_file(BUCKET, obj["Key"], dest)
+            if rel and not is_excluded(rel):
+                keys.append(obj["Key"])
+
+    def fetch(key):
+        rel = key[len(prefix):]
+        dest = os.path.join(WORKDIR, rel)
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        s3.download_file(BUCKET, key, dest)
+
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        list(pool.map(fetch, keys))
 
 
 def upload_workspace(prefix):
-    for root, _dirs, files in os.walk(WORKDIR):
-        for name in files:
+    files = []
+    for root, _dirs, names in os.walk(WORKDIR):
+        for name in names:
             full = os.path.join(root, name)
             rel = os.path.relpath(full, WORKDIR).replace(os.sep, "/")
-            s3.upload_file(full, BUCKET, prefix + rel)
+            if not is_excluded(rel):
+                files.append((full, rel))
+
+    def push(item):
+        full, rel = item
+        s3.upload_file(full, BUCKET, prefix + rel)
+
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        list(pool.map(push, files))
 
 
 def resolve_in_workdir(rel_path):
@@ -69,8 +98,15 @@ def list_files():
     for root, _dirs, names in os.walk(WORKDIR):
         for name in names:
             full = os.path.join(root, name)
-            files.append(os.path.relpath(full, WORKDIR).replace(os.sep, "/"))
+            rel = os.path.relpath(full, WORKDIR).replace(os.sep, "/")
+            if not is_excluded(rel):
+                files.append(rel)
     return {"files": files}
+
+
+# pip (and some other tools) need a writable HOME to write their own config/
+# cache/logs -- the Lambda execution user's real home isn't writable.
+SANDBOX_ENV = {**os.environ, "HOME": "/tmp"}
 
 
 def do_run(code):
@@ -78,7 +114,8 @@ def do_run(code):
         f.write(code)
     try:
         result = subprocess.run(
-            ["python3", "main.py"], cwd=WORKDIR, timeout=10, capture_output=True, text=True,
+            ["python3", "main.py"], cwd=WORKDIR, timeout=EXEC_TIMEOUT_SECONDS, capture_output=True, text=True,
+            env=SANDBOX_ENV,
         )
         return {
             "stdout": truncate(result.stdout),
@@ -98,7 +135,8 @@ def do_run(code):
 def do_run_shell(command):
     try:
         result = subprocess.run(
-            command, shell=True, cwd=WORKDIR, timeout=10, capture_output=True, text=True,
+            command, shell=True, cwd=WORKDIR, timeout=EXEC_TIMEOUT_SECONDS, capture_output=True, text=True,
+            env=SANDBOX_ENV,
         )
         return {
             "stdout": truncate(result.stdout),

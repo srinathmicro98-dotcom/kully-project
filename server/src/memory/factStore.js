@@ -38,3 +38,17 @@ export async function findRelevantFacts({ userId, project, query, matchCount = 5
   if (error) throw error;
   return data;
 }
+
+// Recent-first, no embedding search — powers the Projects panel's "what does
+// Kully remember about this project" view.
+export async function listFactsForProject({ userId, project, limit = 20 }) {
+  const { data, error } = await supabase
+    .from('facts')
+    .select('content, fact_type, created_at')
+    .eq('user_id', userId)
+    .eq('project', project)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return data;
+}

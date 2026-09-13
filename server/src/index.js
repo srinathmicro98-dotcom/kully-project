@@ -7,6 +7,7 @@ import { chatRouter } from './routes/chat.js';
 import { conversationsRouter } from './routes/conversations.js';
 import { agentsRouter } from './routes/agents.js';
 import { skillsRouter } from './routes/skills.js';
+import { projectsRouter } from './routes/projects.js';
 import { requireAuth } from './auth/requireAuth.js';
 import { touchActivity } from './activity.js';
 import { logger } from './utils/logger.js';
@@ -29,6 +30,7 @@ app.use(requireAuth, chatRouter);
 app.use(requireAuth, conversationsRouter);
 app.use(requireAuth, agentsRouter);
 app.use(requireAuth, skillsRouter);
+app.use(requireAuth, projectsRouter);
 
 app.listen(config.port, '127.0.0.1', () => {
   logger.info(`Kully orchestrator listening on 127.0.0.1:${config.port}`);

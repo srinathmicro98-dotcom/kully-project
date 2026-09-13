@@ -201,6 +201,54 @@ header button {
   margin-top: 4px;
 }
 
+.project-item {
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--panel);
+  margin-bottom: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.project-item:hover {
+  background: #1d212b;
+}
+
+.project-item.active {
+  border: 1px solid var(--accent);
+}
+
+.project-item .name {
+  font-size: 14px;
+}
+
+.project-item .meta {
+  font-size: 11px;
+  color: var(--muted);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.fact-item {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--panel);
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.fact-item .fact-type {
+  display: inline-block;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  color: var(--accent);
+  margin-right: 6px;
+}
+
 .skill-item {
   margin-bottom: 16px;
 }
