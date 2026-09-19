@@ -134,16 +134,23 @@ function doRunShell(command) {
   }
 }
 
-function doReadFile(filePath) {
+function doReadFile(filePath, encoding) {
   const full = resolveInWorkdir(filePath);
   if (!fs.existsSync(full)) return { error: `no such file: ${filePath}` };
+  if (encoding === 'base64') {
+    return { content: fs.readFileSync(full).toString('base64'), encoding: 'base64' };
+  }
   return { content: truncate(fs.readFileSync(full, 'utf8')) };
 }
 
-function doWriteFile(filePath, content) {
+function doWriteFile(filePath, content, encoding) {
   const full = resolveInWorkdir(filePath);
   fs.mkdirSync(path.dirname(full), { recursive: true });
-  fs.writeFileSync(full, content ?? '');
+  if (encoding === 'base64') {
+    fs.writeFileSync(full, Buffer.from(content ?? '', 'base64'));
+  } else {
+    fs.writeFileSync(full, content ?? '');
+  }
   return { ok: true };
 }
 
@@ -170,7 +177,7 @@ export const handler = async (event) => {
     return json(400, { error: 'invalid body' });
   }
 
-  const { action = 'run', user_id: userId, project, code, path: filePath, content, command } = payload;
+  const { action = 'run', user_id: userId, project, code, path: filePath, content, command, encoding } = payload;
   if (typeof userId !== 'string') {
     return json(400, { error: 'user_id is required' });
   }
@@ -192,11 +199,11 @@ export const handler = async (event) => {
         break;
       case 'read_file':
         if (typeof filePath !== 'string') return json(400, { error: 'path is required for action=read_file' });
-        result = doReadFile(filePath);
+        result = doReadFile(filePath, encoding);
         break;
       case 'write_file':
         if (typeof filePath !== 'string') return json(400, { error: 'path is required for action=write_file' });
-        result = doWriteFile(filePath, content);
+        result = doWriteFile(filePath, content, encoding);
         break;
       case 'list_files':
         result = doListFiles();

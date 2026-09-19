@@ -1,6 +1,7 @@
 import { webSearch } from '../../llm/searchClient.js';
 import { buildMessages } from './agentInterface.js';
 import { runToolLoop } from './toolLoop.js';
+import { chatCompletion, MODELS } from '../../llm/groqClient.js';
 import { getSystemPrompt } from '../../memory/agentConfigStore.js';
 import { SCRAPE_TOOL, handleScrapeTool } from './sharedTools.js';
 import { logger } from '../../utils/logger.js';
@@ -25,6 +26,13 @@ async function dispatch(call) {
 
 /** @type {import('./agentInterface.js').AgentHandler} */
 export async function handle(ctx) {
+  if (ctx.images?.length) {
+    const systemPrompt = await getSystemPrompt(name, DEFAULT_SYSTEM_PROMPT);
+    const messages = buildMessages({ systemPrompt, ctx });
+    const reply = await chatCompletion({ model: MODELS.vision, messages, maxTokens: 400 });
+    return { reply };
+  }
+
   let extra;
   try {
     const results = await webSearch(ctx.message);

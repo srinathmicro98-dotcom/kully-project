@@ -43,6 +43,12 @@ const downloadArtifactBtn = document.getElementById('downloadArtifactBtn');
 const artifactContent = document.getElementById('artifactContent');
 const toolsList = document.getElementById('toolsList');
 const connectorsList = document.getElementById('connectorsList');
+const fileInput = document.getElementById('fileInput');
+const attachBtn = document.getElementById('attachBtn');
+const micBtn = document.getElementById('micBtn');
+const pendingAttachmentEl = document.getElementById('pendingAttachment');
+const pendingAttachmentNameEl = document.getElementById('pendingAttachmentName');
+const removeAttachmentBtn = document.getElementById('removeAttachmentBtn');
 
 const state = {
   userId: 'default-user',
@@ -68,13 +74,30 @@ function setBanner(text) {
 function setChatEnabled(enabled) {
   input.disabled = !enabled;
   sendBtn.disabled = !enabled;
+  attachBtn.disabled = !enabled;
+  micBtn.disabled = !enabled;
   connectBtn.hidden = enabled;
   disconnectBtn.hidden = !enabled;
+}
+
+function updateHeaderHeight() {
+  const header = document.querySelector('header');
+  if (!header) return;
+  document.documentElement.style.setProperty('--header-h', `${header.offsetHeight}px`);
+}
+
+if (typeof ResizeObserver !== 'undefined') {
+  const headerObserver = new ResizeObserver(updateHeaderHeight);
+  const headerEl = document.querySelector('header');
+  if (headerEl) headerObserver.observe(headerEl);
+} else {
+  window.addEventListener('resize', updateHeaderHeight);
 }
 
 function showApp() {
   loginScreen.hidden = true;
   appEl.hidden = false;
+  updateHeaderHeight();
 }
 
 function showLogin() {
@@ -197,7 +220,31 @@ disconnectBtn.addEventListener('click', async () => {
 
 signOutBtn.addEventListener('click', showLogin);
 
-function addMessage(role, text, agent) {
+async function playText(text, btn) {
+  const original = btn.textContent;
+  btn.textContent = '…';
+  btn.disabled = true;
+  try {
+    const res = await fetch(`${CHAT_URL}/voice/speak`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${state.token}` },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audio.play();
+    audio.onended = () => URL.revokeObjectURL(url);
+  } catch (err) {
+    alert(`Could not play audio: ${err.message}`);
+  } finally {
+    btn.textContent = original;
+    btn.disabled = false;
+  }
+}
+
+function addMessage(role, text, agent, images) {
   const div = document.createElement('div');
   div.className = `msg ${role}`;
   if (agent) {
@@ -207,9 +254,56 @@ function addMessage(role, text, agent) {
     div.appendChild(tag);
   }
   div.appendChild(document.createTextNode(text));
+  if (images?.length) {
+    for (const src of images) {
+      const img = document.createElement('img');
+      img.src = src;
+      div.appendChild(img);
+    }
+  }
+  if (role === 'assistant') {
+    const speakBtn = document.createElement('button');
+    speakBtn.type = 'button';
+    speakBtn.className = 'icon-btn speak-btn';
+    speakBtn.title = 'Play as speech';
+    speakBtn.textContent = '🔊';
+    speakBtn.addEventListener('click', () => playText(text, speakBtn));
+    div.appendChild(speakBtn);
+  }
   messagesEl.appendChild(div);
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
+
+let pendingAttachment = null;
+
+function clearPendingAttachment() {
+  pendingAttachment = null;
+  pendingAttachmentEl.hidden = true;
+  fileInput.value = '';
+}
+
+attachBtn.addEventListener('click', () => fileInput.click());
+
+fileInput.addEventListener('change', () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+  if (file.size > 6 * 1024 * 1024) {
+    alert('That file is too large (max 6MB).');
+    fileInput.value = '';
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    const dataUrl = reader.result;
+    const dataBase64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+    pendingAttachment = { filename: file.name, mimeType: file.type || 'application/octet-stream', dataBase64 };
+    pendingAttachmentNameEl.textContent = `📎 ${file.name}`;
+    pendingAttachmentEl.hidden = false;
+  };
+  reader.readAsDataURL(file);
+});
+
+removeAttachmentBtn.addEventListener('click', clearPendingAttachment);
 
 composer.addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -218,6 +312,8 @@ composer.addEventListener('submit', async (e) => {
 
   addMessage('user', message);
   input.value = '';
+  const attachment = pendingAttachment;
+  clearPendingAttachment();
 
   try {
     const res = await fetch(`${CHAT_URL}/chat`, {
@@ -231,6 +327,7 @@ composer.addEventListener('submit', async (e) => {
         project: state.project,
         conversation_id: state.conversationId,
         message,
+        attachments: attachment ? [attachment] : undefined,
       }),
     });
 
@@ -238,9 +335,58 @@ composer.addEventListener('submit', async (e) => {
     if (!res.ok) throw new Error(`Server returned ${res.status}`);
     const data = await res.json();
     state.conversationId = data.conversation_id;
-    addMessage('assistant', data.reply, data.agent);
+    addMessage('assistant', data.reply, data.agent, data.images);
   } catch (err) {
     addMessage('assistant', `Error: ${err.message}`, 'system');
+  }
+});
+
+// ---- Voice input ----
+
+let mediaRecorder = null;
+let recordedChunks = [];
+
+micBtn.addEventListener('click', async () => {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    recordedChunks = [];
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.ondataavailable = (e) => recordedChunks.push(e.data);
+    mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach((t) => t.stop());
+      micBtn.classList.remove('recording');
+      const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType });
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const dataUrl = reader.result;
+        const audioBase64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+        micBtn.disabled = true;
+        try {
+          const res = await controlFetch(`${CHAT_URL}/voice/transcribe`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ audio_base64: audioBase64, mime_type: mediaRecorder.mimeType }),
+          });
+          if (!res.ok) throw new Error(`status ${res.status}`);
+          const data = await res.json();
+          input.value = data.text || '';
+          input.focus();
+        } catch (err) {
+          alert(`Could not transcribe: ${err.message}`);
+        } finally {
+          micBtn.disabled = false;
+        }
+      };
+      reader.readAsDataURL(blob);
+    };
+    mediaRecorder.start();
+    micBtn.classList.add('recording');
+  } catch (err) {
+    alert(`Microphone access failed: ${err.message}`);
   }
 });
 
@@ -780,11 +926,29 @@ function renderArtifactContent(artifact) {
     iframe.sandbox = '';
     iframe.srcdoc = artifact.content;
     artifactContent.appendChild(iframe);
+  } else if (artifact.kind === 'image') {
+    const img = document.createElement('img');
+    img.src = artifact.content;
+    artifactContent.appendChild(img);
+  } else if (artifact.kind === 'video') {
+    const video = document.createElement('video');
+    video.src = artifact.content;
+    video.controls = true;
+    artifactContent.appendChild(video);
   } else {
     const pre = document.createElement('pre');
     pre.textContent = artifact.content;
     artifactContent.appendChild(pre);
   }
+}
+
+function dataUriToBlob(dataUri) {
+  const [header, base64] = dataUri.split(',');
+  const mimeType = header.match(/data:(.*);base64/)?.[1] || 'application/octet-stream';
+  const bytes = atob(base64);
+  const arr = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+  return new Blob([arr], { type: mimeType });
 }
 
 async function openArtifact(id) {
@@ -798,14 +962,16 @@ async function openArtifact(id) {
     artifactsList.hidden = true;
     artifactViewer.hidden = false;
 
+    const isBinary = artifact.kind === 'image' || artifact.kind === 'video';
+    copyArtifactBtn.hidden = isBinary;
     copyArtifactBtn.onclick = async () => {
       await navigator.clipboard.writeText(artifact.content);
       copyArtifactBtn.textContent = 'Copied ✓';
       setTimeout(() => (copyArtifactBtn.textContent = 'Copy'), 2000);
     };
     downloadArtifactBtn.onclick = () => {
-      const ext = { code: artifact.language || 'txt', markdown: 'md', html: 'html', text: 'txt' }[artifact.kind] || 'txt';
-      const blob = new Blob([artifact.content], { type: 'text/plain' });
+      const ext = { code: artifact.language || 'txt', markdown: 'md', html: 'html', text: 'txt', image: 'png', video: 'mp4' }[artifact.kind] || 'txt';
+      const blob = isBinary ? dataUriToBlob(artifact.content) : new Blob([artifact.content], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

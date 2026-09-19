@@ -1,12 +1,17 @@
 import { buildMessages } from './agentInterface.js';
 import { runToolLoop } from './toolLoop.js';
+import { chatCompletion, MODELS } from '../../llm/groqClient.js';
 import { getSystemPrompt } from '../../memory/agentConfigStore.js';
 import { listSkillsMenu, getSkillBody } from '../../memory/skillStore.js';
 import { listToolConfig } from '../../memory/toolConfigStore.js';
 import { callCodeRunner } from '../../llm/codeRunnerClient.js';
 import { githubReadFile, githubWriteFile, githubListFiles, githubCreatePullRequest } from '../../llm/githubClient.js';
 import { gmailSearch, gmailRead, gmailCreateDraft, driveListFiles, driveReadFile, driveWriteFile } from '../../llm/googleClient.js';
-import { SCRAPE_TOOL, handleScrapeTool, CREATE_ARTIFACT_TOOL, handleCreateArtifactTool } from './sharedTools.js';
+import {
+  SCRAPE_TOOL, handleScrapeTool,
+  CREATE_ARTIFACT_TOOL, handleCreateArtifactTool,
+  GENERATE_IMAGE_TOOL, handleGenerateImageTool,
+} from './sharedTools.js';
 import { config } from '../../config.js';
 import { logger } from '../../utils/logger.js';
 
@@ -30,7 +35,14 @@ dependency installs (npm install, pip install) and can run test suites/builds �
 call that needs them (e.g. "npm install && npm test"). Use scrape_url to look up real documentation or \
 examples from the web when useful. Use use_skill when a listed skill matches what's being asked. Use \
 create_artifact for a substantial finished piece of output (a full file, a report, a design doc) that the \
-user would want to view/save on its own — not for short snippets inline in your reply.${
+user would want to view/save on its own — not for short snippets inline in your reply. Use generate_image \
+to create an image from a description when asked. When an uploaded data file (CSV/Excel) is mentioned as \
+available in your workspace (under uploads/), install what you need (pandas/matplotlib/openpyxl via pip) \
+to actually analyze it, save any chart with matplotlib's savefig, read the PNG back via read_file with \
+encoding:"base64", and hand it to the user with create_artifact using kind:"image" and \
+content:"data:image/png;base64,"+<the base64 you read back> — never fabricate numbers or a chart you \
+didn't actually compute. read_file/write_file take an optional encoding:"base64" for binary files \
+(images, spreadsheets); omit it for plain text.${
   GITHUB_ENABLED
     ? ' You also have github_read_file, github_write_file, github_list_files, and github_create_pr for ' +
       'working against a real GitHub repo (owner/repo the user names). You can NEVER write directly to ' +
@@ -91,6 +103,7 @@ const TOOLS = [
         properties: {
           language: { type: 'string', enum: ['node', 'python'] },
           path: { type: 'string' },
+          encoding: { type: ['string', 'null'], enum: ['base64', null], description: 'Pass "base64" for binary files (images, xlsx). Omit/null for plain text.' },
         },
         required: ['language', 'path'],
       },
@@ -107,6 +120,7 @@ const TOOLS = [
           language: { type: 'string', enum: ['node', 'python'] },
           path: { type: 'string' },
           content: { type: 'string' },
+          encoding: { type: ['string', 'null'], enum: ['base64', null], description: 'Pass "base64" if content is base64-encoded binary data. Omit/null for plain text.' },
         },
         required: ['language', 'path', 'content'],
       },
@@ -140,6 +154,7 @@ const TOOLS = [
   },
   SCRAPE_TOOL,
   CREATE_ARTIFACT_TOOL,
+  GENERATE_IMAGE_TOOL,
   ...(GITHUB_ENABLED
     ? [
         {
@@ -319,9 +334,9 @@ async function dispatch(call, ctx, enabledNames) {
     case 'run_shell':
       return callCodeRunner({ action: 'run_shell', language: args.language, command: args.command, userId: ctx.userId, project: ctx.project });
     case 'read_file':
-      return callCodeRunner({ action: 'read_file', language: args.language, path: args.path, userId: ctx.userId, project: ctx.project });
+      return callCodeRunner({ action: 'read_file', language: args.language, path: args.path, encoding: args.encoding, userId: ctx.userId, project: ctx.project });
     case 'write_file':
-      return callCodeRunner({ action: 'write_file', language: args.language, path: args.path, content: args.content, userId: ctx.userId, project: ctx.project });
+      return callCodeRunner({ action: 'write_file', language: args.language, path: args.path, content: args.content, encoding: args.encoding, userId: ctx.userId, project: ctx.project });
     case 'list_files':
       return callCodeRunner({ action: 'list_files', language: args.language, userId: ctx.userId, project: ctx.project });
     case 'use_skill': {
@@ -332,6 +347,8 @@ async function dispatch(call, ctx, enabledNames) {
       return handleScrapeTool(args);
     case 'create_artifact':
       return handleCreateArtifactTool(args, ctx);
+    case 'generate_image':
+      return handleGenerateImageTool(args, ctx);
     case 'github_read_file':
       return githubReadFile(args);
     case 'github_list_files':
@@ -360,6 +377,16 @@ async function dispatch(call, ctx, enabledNames) {
 /** @type {import('./agentInterface.js').AgentHandler} */
 export async function handle(ctx) {
   const basePrompt = await getSystemPrompt(name, DEFAULT_SYSTEM_PROMPT);
+
+  // A vision turn (an image attached, no data file) is answered as one direct
+  // call to the vision model instead of the tool loop — Groq's tool-calling
+  // models here aren't the vision-capable one, and a "what's in this photo"
+  // question rarely also needs sandbox tools in the same turn.
+  if (ctx.images?.length) {
+    const messages = buildMessages({ systemPrompt: basePrompt, ctx });
+    const reply = await chatCompletion({ model: MODELS.vision, messages, maxTokens: 400 });
+    return { reply };
+  }
 
   let skillsMenuText = '';
   try {

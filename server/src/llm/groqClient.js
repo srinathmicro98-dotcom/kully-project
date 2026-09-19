@@ -5,9 +5,22 @@ const groq = new Groq({ apiKey: config.groqApiKey });
 
 // Groq's current catalog (Llama 3.x was retired) — both are gpt-oss reasoning
 // models, so every call hides reasoning tokens and only returns final content.
+// Verified live against GET /openai/v1/models on 2026-09-19 — re-check before
+// assuming these still exist, the catalog has changed before.
 export const MODELS = {
   fast: 'openai/gpt-oss-20b',
   smart: 'openai/gpt-oss-120b',
+  // Only Groq model with input_modalities including "image" as of the last
+  // live check. Also supports tool-calling, but we keep vision turns as a
+  // single direct call (see agent handle()s) rather than routing them
+  // through the tool loop, to keep the vision path simple and predictable.
+  vision: 'qwen/qwen3.8-27b',
+  whisper: 'whisper-large-v3-turbo',
+  // Requires the org to accept this model's terms in the Groq console before
+  // it will actually respond (verified live — returns `model_terms_required`
+  // until then). Dormant until accepted, same pattern as the GitHub/Google
+  // integrations: built now, activated later.
+  tts: 'canopylabs/orpheus-v1-english',
 };
 
 export async function chatCompletion({
@@ -51,4 +64,38 @@ export async function chatCompletionWithTools({
     reasoning_format: 'hidden',
   });
   return res.choices[0]?.message;
+}
+
+/**
+ * Transcribes recorded speech via Groq Whisper. `buffer` is the raw audio
+ * bytes (webm/mp3/wav/etc — whatever the browser's MediaRecorder produced).
+ */
+export async function transcribeAudio(buffer, filename = 'audio.webm') {
+  const file = new File([buffer], filename);
+  const res = await groq.audio.transcriptions.create({
+    file,
+    model: MODELS.whisper,
+  });
+  return res.text ?? '';
+}
+
+/**
+ * Text-to-speech. The installed groq-sdk (0.7.0) predates Groq's TTS
+ * endpoint, so this calls the OpenAI-compatible REST API directly rather
+ * than going through the SDK client.
+ */
+export async function textToSpeech(text, voice = 'hannah') {
+  const res = await fetch('https://api.groq.com/openai/v1/audio/speech', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${config.groqApiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ model: MODELS.tts, input: text, voice, response_format: 'wav' }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Groq TTS returned ${res.status}: ${body}`);
+  }
+  return Buffer.from(await res.arrayBuffer());
 }

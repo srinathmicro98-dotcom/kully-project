@@ -32,13 +32,14 @@ export const CREATE_ARTIFACT_TOOL = {
   function: {
     name: 'create_artifact',
     description:
-      'Save a substantial finished piece of output (a full file, a report, a design doc) as a viewable, ' +
-      'downloadable artifact in the Artifacts panel — not for short snippets you can just show inline.',
+      'Save a substantial finished piece of output (a full file, a report, a design doc, a chart) as a ' +
+      'viewable, downloadable artifact in the Artifacts panel — not for short snippets you can just show ' +
+      'inline. For kind=image/video, content must be a data URI (e.g. "data:image/png;base64,...").',
     parameters: {
       type: 'object',
       properties: {
         title: { type: 'string' },
-        kind: { type: 'string', enum: ['code', 'markdown', 'html', 'text'] },
+        kind: { type: 'string', enum: ['code', 'markdown', 'html', 'text', 'image', 'video'] },
         language: { type: ['string', 'null'], description: 'For kind=code, e.g. "python", "javascript".' },
         content: { type: 'string' },
       },
@@ -57,4 +58,50 @@ export async function handleCreateArtifactTool(args, ctx) {
     language: args.language,
     content: args.content,
   });
+}
+
+export const GENERATE_IMAGE_TOOL = {
+  type: 'function',
+  function: {
+    name: 'generate_image',
+    description: 'Generate an image from a text description and show it to the user.',
+    parameters: {
+      type: 'object',
+      properties: {
+        prompt: { type: 'string', description: 'A clear, detailed description of the desired image.' },
+        width: { type: ['number', 'null'], description: 'Defaults to 1024 if omitted.' },
+        height: { type: ['number', 'null'], description: 'Defaults to 1024 if omitted.' },
+      },
+      required: ['prompt'],
+    },
+  },
+};
+
+export async function handleGenerateImageTool(args, ctx) {
+  const width = args.width || 1024;
+  const height = args.height || 1024;
+  const seed = Math.floor(Math.random() * 1_000_000_000);
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(args.prompt)}` +
+    `?width=${width}&height=${height}&nologo=true&seed=${seed}`;
+
+  const res = await fetch(url);
+  if (!res.ok) return { error: `image generation failed: ${res.status}` };
+  const contentType = res.headers.get('content-type') || 'image/jpeg';
+  const buffer = Buffer.from(await res.arrayBuffer());
+  const dataUri = `data:${contentType};base64,${buffer.toString('base64')}`;
+
+  const artifact = await createArtifact({
+    userId: ctx.userId,
+    project: ctx.project,
+    conversationId: ctx.conversationId,
+    title: args.prompt.slice(0, 60),
+    kind: 'image',
+    language: null,
+    content: dataUri,
+  });
+
+  ctx.generatedImages = ctx.generatedImages || [];
+  ctx.generatedImages.push(dataUri);
+
+  return { ok: true, artifactId: artifact.id, title: artifact.title };
 }

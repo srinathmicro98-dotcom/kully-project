@@ -141,7 +141,10 @@ header button {
 .panel {
   position: absolute;
   inset: 0;
-  top: 53px;
+  /* The header wraps to multiple lines on narrow viewports now that it has
+     several buttons — its real height is measured in JS (updateHeaderHeight)
+     since it isn't a fixed number of pixels. */
+  top: var(--header-h, 53px);
   background: var(--bg);
   z-index: 5;
   display: flex;
@@ -376,6 +379,17 @@ header button {
   background: white;
 }
 
+#artifactContent img {
+  max-width: 100%;
+  border-radius: 6px;
+  display: block;
+}
+
+#artifactContent video {
+  width: 100%;
+  border-radius: 6px;
+}
+
 /* ---- Plugins / Connectors ---- */
 
 .toggle-row {
@@ -575,6 +589,42 @@ header button {
   font-size: 11px;
   color: var(--muted);
   margin-bottom: 4px;
+}
+
+.msg img {
+  max-width: 100%;
+  border-radius: 8px;
+  margin-top: 6px;
+  display: block;
+}
+
+.msg .speak-btn {
+  display: block;
+  margin-top: 4px;
+  font-size: 13px;
+  padding: 2px 4px;
+}
+
+.pending-attachment {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 16px 8px;
+  padding: 6px 10px;
+  background: var(--panel);
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.pending-attachment span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.icon-btn.recording {
+  color: #ff6b6b;
 }
 
 #composer {

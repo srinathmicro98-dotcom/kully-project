@@ -153,19 +153,26 @@ def do_run_shell(command):
         }
 
 
-def do_read_file(rel_path):
+def do_read_file(rel_path, encoding=None):
     full = resolve_in_workdir(rel_path)
     if not os.path.exists(full):
         return {"error": f"no such file: {rel_path}"}
+    if encoding == "base64":
+        with open(full, "rb") as f:
+            return {"content": base64.b64encode(f.read()).decode("ascii"), "encoding": "base64"}
     with open(full, "r") as f:
         return {"content": truncate(f.read())}
 
 
-def do_write_file(rel_path, content):
+def do_write_file(rel_path, content, encoding=None):
     full = resolve_in_workdir(rel_path)
     os.makedirs(os.path.dirname(full), exist_ok=True)
-    with open(full, "w") as f:
-        f.write(content or "")
+    if encoding == "base64":
+        with open(full, "wb") as f:
+            f.write(base64.b64decode(content or ""))
+    else:
+        with open(full, "w") as f:
+            f.write(content or "")
     return {"ok": True}
 
 
@@ -186,6 +193,7 @@ def lambda_handler(event, _context):
     action = payload.get("action", "run")
     user_id = payload.get("user_id")
     project = payload.get("project")
+    encoding = payload.get("encoding")
     if not isinstance(user_id, str):
         return response(400, {"error": "user_id is required"})
 
@@ -208,12 +216,12 @@ def lambda_handler(event, _context):
             rel_path = payload.get("path")
             if not isinstance(rel_path, str):
                 return response(400, {"error": "path is required for action=read_file"})
-            result = do_read_file(rel_path)
+            result = do_read_file(rel_path, encoding)
         elif action == "write_file":
             rel_path = payload.get("path")
             if not isinstance(rel_path, str):
                 return response(400, {"error": "path is required for action=write_file"})
-            result = do_write_file(rel_path, payload.get("content"))
+            result = do_write_file(rel_path, payload.get("content"), encoding)
         elif action == "list_files":
             result = list_files()
         else:

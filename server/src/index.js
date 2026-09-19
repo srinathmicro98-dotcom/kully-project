@@ -11,6 +11,7 @@ import { projectsRouter } from './routes/projects.js';
 import { toolsRouter } from './routes/tools.js';
 import { artifactsRouter } from './routes/artifacts.js';
 import { factsRouter } from './routes/facts.js';
+import { voiceRouter } from './routes/voice.js';
 import { requireAuth } from './auth/requireAuth.js';
 import { touchActivity } from './activity.js';
 import { logger } from './utils/logger.js';
@@ -18,7 +19,8 @@ import { logger } from './utils/logger.js';
 const app = express();
 
 app.use(cors());
-app.use(express.json());
+// Default (~100kb) is too small for base64 image/file attachments and audio clips.
+app.use(express.json({ limit: '10mb' }));
 
 // Anything except health checks and the Lambda's own idle-check counts as
 // "this box is in use" for the auto-stop timer.
@@ -37,6 +39,7 @@ app.use(requireAuth, projectsRouter);
 app.use(requireAuth, toolsRouter);
 app.use(requireAuth, artifactsRouter);
 app.use(requireAuth, factsRouter);
+app.use(requireAuth, voiceRouter);
 
 app.listen(config.port, '127.0.0.1', () => {
   logger.info(`Kully orchestrator listening on 127.0.0.1:${config.port}`);

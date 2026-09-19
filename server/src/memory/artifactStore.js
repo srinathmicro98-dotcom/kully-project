@@ -1,6 +1,6 @@
 import { supabase } from './supabaseClient.js';
 
-const KINDS = new Set(['code', 'markdown', 'html', 'text']);
+const KINDS = new Set(['code', 'markdown', 'html', 'text', 'image', 'video']);
 
 export async function createArtifact({ userId, project, conversationId, title, kind, language, content }) {
   const { data, error } = await supabase

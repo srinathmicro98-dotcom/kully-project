@@ -78,7 +78,7 @@ create table artifacts (
   project text not null default 'default',
   conversation_id uuid references conversations(id) on delete set null,
   title text not null,
-  kind text not null check (kind in ('code','markdown','html','text')),
+  kind text not null check (kind in ('code','markdown','html','text','image','video')),
   language text,
   content text not null,
   created_at timestamptz not null default now()
