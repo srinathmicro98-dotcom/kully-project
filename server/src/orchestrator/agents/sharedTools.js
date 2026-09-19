@@ -84,7 +84,12 @@ export async function handleGenerateImageTool(args, ctx) {
   const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(args.prompt)}` +
     `?width=${width}&height=${height}&nologo=true&seed=${seed}`;
 
-  const res = await fetch(url);
+  let res;
+  try {
+    res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+  } catch (err) {
+    return { error: `image generation failed: ${err.name === 'TimeoutError' ? 'timed out' : err.message}` };
+  }
   if (!res.ok) return { error: `image generation failed: ${res.status}` };
   const contentType = res.headers.get('content-type') || 'image/jpeg';
   const buffer = Buffer.from(await res.arrayBuffer());
