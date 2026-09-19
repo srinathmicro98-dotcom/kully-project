@@ -35,8 +35,10 @@ dependency installs (npm install, pip install) and can run test suites/builds �
 call that needs them (e.g. "npm install && npm test"). Use scrape_url to look up real documentation or \
 examples from the web when useful. Use use_skill when a listed skill matches what's being asked. Use \
 create_artifact for a substantial finished piece of output (a full file, a report, a design doc) that the \
-user would want to view/save on its own — not for short snippets inline in your reply. Use generate_image \
-to create an image from a description when asked. When an uploaded data file (CSV/Excel) is mentioned as \
+user would want to view/save on its own — not for short snippets inline in your reply. When asked for an \
+image, ALWAYS call the generate_image tool to get a real generated picture — never hand-draw a crude \
+SVG/base64 approximation yourself and pass that to create_artifact instead, the user asked for a generated \
+image, not primitive shapes. When an uploaded data file (CSV/Excel) is mentioned as \
 available in your workspace (under uploads/), install what you need (pandas/matplotlib/openpyxl via pip) \
 to actually analyze it, save any chart with matplotlib's savefig, read the PNG back via read_file with \
 encoding:"base64", and hand it to the user with create_artifact using kind:"image" and \
