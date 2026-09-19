@@ -32,7 +32,8 @@
     <div class="controls">
       <button id="notifyBtn" type="button" class="ghost-btn" title="Notify me when ready">🔔</button>
       <button id="projectsBtn" type="button" class="ghost-btn" title="Projects">Projects</button>
-      <button id="skillsBtn" type="button" class="ghost-btn" title="Skills">Skills</button>
+      <button id="artifactsBtn" type="button" class="ghost-btn" title="Artifacts">Artifacts</button>
+      <button id="skillsBtn" type="button" class="ghost-btn" title="Settings">Settings</button>
       <button id="connectBtn" type="button">Connect</button>
       <button id="disconnectBtn" type="button" hidden>Disconnect</button>
       <button id="signOutBtn" type="button">Sign out</button>
@@ -64,12 +65,32 @@
       <div id="projectsList"></div>
       <h3 class="panel-section-title">Memory for <span id="memoryProjectName" class="dim"></span></h3>
       <div id="projectFactsList"></div>
+      <button type="button" id="addFactBtn" class="ghost-btn">+ Add fact</button>
+    </div>
+  </div>
+
+  <div id="artifactsPanel" class="panel" hidden>
+    <div class="panel-header">
+      <h2>Artifacts</h2>
+      <button type="button" class="closePanelBtn">✕</button>
+    </div>
+    <div class="panel-body" id="artifactsBody">
+      <div id="artifactsList"></div>
+      <div id="artifactViewer" hidden>
+        <div class="artifact-viewer-header">
+          <button type="button" id="backToArtifactsBtn" class="ghost-btn">← Back</button>
+          <span id="artifactTitle"></span>
+          <button type="button" id="copyArtifactBtn" class="ghost-btn">Copy</button>
+          <button type="button" id="downloadArtifactBtn" class="ghost-btn">Download</button>
+        </div>
+        <div id="artifactContent"></div>
+      </div>
     </div>
   </div>
 
   <div id="skillsPanel" class="panel" hidden>
     <div class="panel-header">
-      <h2>Skills</h2>
+      <h2>Settings</h2>
       <button type="button" class="closePanelBtn">✕</button>
     </div>
     <div class="panel-body">
@@ -78,6 +99,10 @@
       <h3 class="panel-section-title">Skills library <span class="dim">— invokable by the dev agent</span></h3>
       <div id="skillsLibraryList"></div>
       <button type="button" id="newSkillBtn" class="ghost-btn">+ New skill</button>
+      <h3 class="panel-section-title">Plugins <span class="dim">— enable/disable the dev agent's tools</span></h3>
+      <div id="toolsList"></div>
+      <h3 class="panel-section-title">Connectors</h3>
+      <div id="connectorsList"></div>
     </div>
   </div>
 </div>

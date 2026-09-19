@@ -38,4 +38,8 @@ export const config = {
     .split(',')
     .map((r) => r.trim())
     .filter(Boolean),
+  // Optional: Google (Gmail/Drive) connector. Needed here only to refresh an
+  // expired access token — the OAuth exchange itself happens in the Lambda.
+  googleClientId: process.env.GOOGLE_CLIENT_ID || null,
+  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || null,
 };

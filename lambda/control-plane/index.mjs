@@ -86,6 +86,16 @@ function requireAuth(headers) {
   }
 }
 
+function getAuthedUserId(headers) {
+  const token = getBearerToken(headers);
+  if (!token) return null;
+  try {
+    return jwt.verify(token, process.env.JWT_SECRET).sub;
+  } catch {
+    return null;
+  }
+}
+
 async function handleLogin(rawBody) {
   let payload;
   try {
@@ -187,6 +197,106 @@ async function handleNotifyReady(rawBody) {
   return json(200, { ok: true, notified: (data ?? []).length });
 }
 
+const GOOGLE_ENABLED = !!process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_SCOPES = [
+  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/gmail.compose',
+  'https://www.googleapis.com/auth/drive',
+].join(' ');
+
+function googleRedirectUri(event) {
+  // Same Function URL this request came in on — one less thing to keep in sync.
+  return `https://${event.requestContext.domainName}/connectors/google/callback`;
+}
+
+async function handleGoogleStart(event) {
+  const token = event.queryStringParameters?.token;
+  if (!token) return json(401, { error: 'missing token' });
+  let userId;
+  try {
+    userId = jwt.verify(token, process.env.JWT_SECRET).sub;
+  } catch {
+    return json(401, { error: 'invalid token' });
+  }
+
+  // Short-lived signed state carries the user identity through Google's
+  // redirect — Google's callback can't send back our own Authorization header.
+  const state = jwt.sign({ sub: userId, purpose: 'google-oauth' }, process.env.JWT_SECRET, { expiresIn: '10m' });
+
+  const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  url.searchParams.set('client_id', process.env.GOOGLE_CLIENT_ID);
+  url.searchParams.set('redirect_uri', googleRedirectUri(event));
+  url.searchParams.set('response_type', 'code');
+  url.searchParams.set('scope', GOOGLE_SCOPES);
+  url.searchParams.set('access_type', 'offline');
+  url.searchParams.set('prompt', 'consent');
+  url.searchParams.set('state', state);
+
+  return { statusCode: 302, headers: { Location: url.toString() } };
+}
+
+async function handleGoogleCallback(event) {
+  const { code, state, error: oauthError } = event.queryStringParameters || {};
+  if (oauthError) return { statusCode: 302, headers: { Location: `/?connector_error=${encodeURIComponent(oauthError)}` } };
+
+  let userId;
+  try {
+    const decoded = jwt.verify(state, process.env.JWT_SECRET);
+    if (decoded.purpose !== 'google-oauth') throw new Error('wrong purpose');
+    userId = decoded.sub;
+  } catch {
+    return json(401, { error: 'invalid or expired state' });
+  }
+
+  const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      code,
+      client_id: process.env.GOOGLE_CLIENT_ID,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET,
+      redirect_uri: googleRedirectUri(event),
+      grant_type: 'authorization_code',
+    }),
+  });
+  if (!tokenRes.ok) {
+    console.error('Google token exchange failed:', await tokenRes.text());
+    return { statusCode: 302, headers: { Location: '/?connector_error=google_token_exchange_failed' } };
+  }
+
+  const tokens = await tokenRes.json();
+  const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
+
+  const { error: dbError } = await supabase.from('connectors').upsert({
+    user_id: userId,
+    provider: 'google',
+    access_token: tokens.access_token,
+    refresh_token: tokens.refresh_token, // only present on first consent — upsert preserves it otherwise via the ignoreDuplicates:false default merge
+    expires_at: expiresAt,
+    scopes: tokens.scope,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'user_id,provider', ignoreDuplicates: false });
+
+  if (dbError) {
+    console.error('storing google connector failed:', dbError);
+    return { statusCode: 302, headers: { Location: '/?connector_error=storage_failed' } };
+  }
+
+  return { statusCode: 302, headers: { Location: '/?connected=google' } };
+}
+
+async function handleListConnectors(userId) {
+  const { data, error } = await supabase.from('connectors').select('provider, scopes, updated_at').eq('user_id', userId);
+  if (error) return json(500, { error: error.message });
+  return json(200, data);
+}
+
+async function handleDisconnectProvider(userId, provider) {
+  const { error } = await supabase.from('connectors').delete().eq('user_id', userId).eq('provider', provider);
+  if (error) return json(500, { error: error.message });
+  return json(200, { ok: true });
+}
+
 // EventBridge scheduled invocation — no HTTP fields on the event at all.
 async function handleIdleCheck() {
   const state = await getInstanceState();
@@ -245,6 +355,22 @@ export const handler = async (event) => {
     }
     if (method === 'POST' && reqPath === '/push/notify-ready') {
       return requireAuth(headers) ? await handleNotifyReady(body) : json(401, { error: 'unauthorized' });
+    }
+
+    if (GOOGLE_ENABLED && method === 'GET' && reqPath === '/connectors/google/start') {
+      return handleGoogleStart(event);
+    }
+    if (GOOGLE_ENABLED && method === 'GET' && reqPath === '/connectors/google/callback') {
+      return handleGoogleCallback(event);
+    }
+    if (method === 'GET' && reqPath === '/connectors') {
+      const userId = getAuthedUserId(headers);
+      return userId ? await handleListConnectors(userId) : json(401, { error: 'unauthorized' });
+    }
+    if (method === 'DELETE' && reqPath.startsWith('/connectors/')) {
+      const userId = getAuthedUserId(headers);
+      if (!userId) return json(401, { error: 'unauthorized' });
+      return handleDisconnectProvider(userId, reqPath.slice('/connectors/'.length));
     }
 
     return json(404, { error: 'not found' });

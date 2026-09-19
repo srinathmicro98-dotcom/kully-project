@@ -31,6 +31,18 @@ const projectsPanel = document.getElementById('projectsPanel');
 const projectsList = document.getElementById('projectsList');
 const memoryProjectName = document.getElementById('memoryProjectName');
 const projectFactsList = document.getElementById('projectFactsList');
+const addFactBtn = document.getElementById('addFactBtn');
+const artifactsBtn = document.getElementById('artifactsBtn');
+const artifactsPanel = document.getElementById('artifactsPanel');
+const artifactsList = document.getElementById('artifactsList');
+const artifactViewer = document.getElementById('artifactViewer');
+const backToArtifactsBtn = document.getElementById('backToArtifactsBtn');
+const artifactTitle = document.getElementById('artifactTitle');
+const copyArtifactBtn = document.getElementById('copyArtifactBtn');
+const downloadArtifactBtn = document.getElementById('downloadArtifactBtn');
+const artifactContent = document.getElementById('artifactContent');
+const toolsList = document.getElementById('toolsList');
+const connectorsList = document.getElementById('connectorsList');
 
 const state = {
   userId: 'default-user',
@@ -234,7 +246,7 @@ composer.addEventListener('submit', async (e) => {
 
 // ---- History panel ----
 
-const ALL_PANELS = [historyPanel, skillsPanel, projectsPanel];
+const ALL_PANELS = [historyPanel, skillsPanel, projectsPanel, artifactsPanel];
 
 function openPanel(panel) {
   for (const p of ALL_PANELS) p.hidden = p !== panel;
@@ -370,6 +382,8 @@ skillsBtn.addEventListener('click', () => {
   openPanel(skillsPanel);
   loadSkills();
   loadSkillsLibrary();
+  loadTools();
+  loadConnectors();
 });
 
 // ---- Skills library (invokable skills, not just agent prompts) ----
@@ -482,6 +496,73 @@ function switchProject(project) {
   });
 }
 
+const FACT_TYPES = ['decision', 'todo', 'architecture', 'preference', 'other'];
+
+function renderFactItem(fact) {
+  const item = document.createElement('div');
+  item.className = 'fact-item';
+
+  const content = document.createElement('div');
+  content.className = 'fact-content';
+  const typeTag = document.createElement('span');
+  typeTag.className = 'fact-type';
+  typeTag.textContent = fact.fact_type;
+  const text = document.createElement('span');
+  text.textContent = fact.content;
+  content.appendChild(typeTag);
+  content.appendChild(text);
+
+  const actions = document.createElement('div');
+  actions.className = 'fact-actions';
+  const editBtn = document.createElement('button');
+  editBtn.type = 'button';
+  editBtn.textContent = 'Edit';
+  const deleteBtn = document.createElement('button');
+  deleteBtn.type = 'button';
+  deleteBtn.textContent = 'Delete';
+
+  editBtn.addEventListener('click', () => {
+    const textarea = document.createElement('textarea');
+    textarea.value = fact.content;
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.textContent = 'Save';
+    saveBtn.addEventListener('click', async () => {
+      try {
+        const res = await controlFetch(`${CHAT_URL}/facts/${fact.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: state.userId, content: textarea.value }),
+        });
+        if (!res.ok) throw new Error(`status ${res.status}`);
+        fact.content = textarea.value;
+        text.textContent = fact.content;
+        content.replaceChildren(typeTag, text);
+      } catch (err) {
+        alert(`Could not save: ${err.message}`);
+      }
+    });
+    content.replaceChildren(textarea, saveBtn);
+  });
+
+  deleteBtn.addEventListener('click', async () => {
+    if (!confirm('Delete this memory?')) return;
+    try {
+      const res = await controlFetch(`${CHAT_URL}/facts/${fact.id}?user_id=${encodeURIComponent(state.userId)}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      item.remove();
+    } catch (err) {
+      alert(`Could not delete: ${err.message}`);
+    }
+  });
+
+  actions.appendChild(editBtn);
+  actions.appendChild(deleteBtn);
+  item.appendChild(content);
+  item.appendChild(actions);
+  return item;
+}
+
 async function loadProjectFacts(project) {
   memoryProjectName.textContent = project;
   projectFactsList.textContent = 'Loading…';
@@ -496,19 +577,58 @@ async function loadProjectFacts(project) {
       return;
     }
     for (const fact of facts) {
-      const item = document.createElement('div');
-      item.className = 'fact-item';
-      const typeTag = document.createElement('span');
-      typeTag.className = 'fact-type';
-      typeTag.textContent = fact.fact_type;
-      item.appendChild(typeTag);
-      item.appendChild(document.createTextNode(fact.content));
-      projectFactsList.appendChild(item);
+      projectFactsList.appendChild(renderFactItem(fact));
     }
   } catch (err) {
     projectFactsList.textContent = `Could not load memory: ${err.message}. Is your server connected?`;
   }
 }
+
+addFactBtn.addEventListener('click', () => {
+  const form = document.createElement('div');
+  form.className = 'add-fact-form';
+
+  const textarea = document.createElement('textarea');
+  textarea.placeholder = 'Something worth remembering for this project…';
+
+  const row = document.createElement('div');
+  row.className = 'row';
+  const select = document.createElement('select');
+  for (const t of FACT_TYPES) {
+    const opt = document.createElement('option');
+    opt.value = t;
+    opt.textContent = t;
+    select.appendChild(opt);
+  }
+  const saveBtn = document.createElement('button');
+  saveBtn.type = 'button';
+  saveBtn.textContent = 'Add';
+
+  saveBtn.addEventListener('click', async () => {
+    const content = textarea.value.trim();
+    if (!content) return;
+    try {
+      const res = await controlFetch(`${CHAT_URL}/facts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: state.userId, project: state.project, content, fact_type: select.value }),
+      });
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      const fact = await res.json();
+      form.replaceWith(renderFactItem(fact));
+      if (projectFactsList.textContent === 'Nothing remembered for this project yet.') projectFactsList.textContent = '';
+    } catch (err) {
+      alert(`Could not add: ${err.message}`);
+    }
+  });
+
+  row.appendChild(select);
+  row.appendChild(saveBtn);
+  form.appendChild(textarea);
+  form.appendChild(row);
+  projectFactsList.prepend(form);
+  textarea.focus();
+});
 
 async function loadProjects() {
   projectsList.textContent = 'Loading…';
@@ -554,6 +674,206 @@ projectsBtn.addEventListener('click', () => {
   loadProjects();
   loadProjectFacts(state.project);
 });
+
+// ---- Plugins (tool toggles) ----
+
+async function loadTools() {
+  toolsList.textContent = 'Loading…';
+  try {
+    const res = await controlFetch(`${CHAT_URL}/tools`);
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const tools = await res.json();
+
+    toolsList.innerHTML = '';
+    for (const tool of tools) {
+      const row = document.createElement('div');
+      row.className = 'toggle-row';
+      const name = document.createElement('span');
+      name.className = 'tool-name';
+      name.textContent = tool.name;
+
+      const label = document.createElement('label');
+      label.className = 'toggle-switch';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = tool.enabled;
+      const slider = document.createElement('span');
+      slider.className = 'slider';
+
+      checkbox.addEventListener('change', async () => {
+        try {
+          const putRes = await controlFetch(`${CHAT_URL}/tools/${encodeURIComponent(tool.name)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: checkbox.checked }),
+          });
+          if (!putRes.ok) throw new Error(`status ${putRes.status}`);
+        } catch (err) {
+          checkbox.checked = !checkbox.checked;
+          alert(`Could not save: ${err.message}`);
+        }
+      });
+
+      label.appendChild(checkbox);
+      label.appendChild(slider);
+      row.appendChild(name);
+      row.appendChild(label);
+      toolsList.appendChild(row);
+    }
+  } catch (err) {
+    toolsList.textContent = `Could not load plugins: ${err.message}. Is your server connected?`;
+  }
+}
+
+// ---- Connectors ----
+
+async function loadConnectors() {
+  connectorsList.textContent = 'Loading…';
+  try {
+    const res = await controlFetch('/connectors');
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const connectors = await res.json();
+    const google = connectors.find((c) => c.provider === 'google');
+
+    connectorsList.innerHTML = '';
+    const row = document.createElement('div');
+    row.className = 'connector-row';
+    const label = document.createElement('span');
+    label.textContent = google ? `Google — connected` : 'Google — not connected';
+    row.appendChild(label);
+
+    if (google) {
+      const disconnectBtn2 = document.createElement('button');
+      disconnectBtn2.type = 'button';
+      disconnectBtn2.textContent = 'Disconnect';
+      disconnectBtn2.addEventListener('click', async () => {
+        try {
+          const res2 = await controlFetch('/connectors/google', { method: 'DELETE' });
+          if (!res2.ok) throw new Error(`status ${res2.status}`);
+          loadConnectors();
+        } catch (err) {
+          alert(`Could not disconnect: ${err.message}`);
+        }
+      });
+      row.appendChild(disconnectBtn2);
+    } else {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = 'Connect';
+      btn.addEventListener('click', () => {
+        window.location.href = `/connectors/google/start?token=${encodeURIComponent(state.token)}`;
+      });
+      row.appendChild(btn);
+    }
+    connectorsList.appendChild(row);
+  } catch (err) {
+    connectorsList.textContent = `Could not load connectors: ${err.message}. Is your server connected?`;
+  }
+}
+
+// ---- Artifacts ----
+
+function renderArtifactContent(artifact) {
+  artifactContent.innerHTML = '';
+  if (artifact.kind === 'html') {
+    const iframe = document.createElement('iframe');
+    iframe.sandbox = '';
+    iframe.srcdoc = artifact.content;
+    artifactContent.appendChild(iframe);
+  } else {
+    const pre = document.createElement('pre');
+    pre.textContent = artifact.content;
+    artifactContent.appendChild(pre);
+  }
+}
+
+async function openArtifact(id) {
+  try {
+    const res = await controlFetch(`${CHAT_URL}/artifacts/${id}`);
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const artifact = await res.json();
+
+    artifactTitle.textContent = artifact.title;
+    renderArtifactContent(artifact);
+    artifactsList.hidden = true;
+    artifactViewer.hidden = false;
+
+    copyArtifactBtn.onclick = async () => {
+      await navigator.clipboard.writeText(artifact.content);
+      copyArtifactBtn.textContent = 'Copied ✓';
+      setTimeout(() => (copyArtifactBtn.textContent = 'Copy'), 2000);
+    };
+    downloadArtifactBtn.onclick = () => {
+      const ext = { code: artifact.language || 'txt', markdown: 'md', html: 'html', text: 'txt' }[artifact.kind] || 'txt';
+      const blob = new Blob([artifact.content], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${artifact.title.replace(/[^\w.-]+/g, '_')}.${ext}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+  } catch (err) {
+    alert(`Could not open artifact: ${err.message}`);
+  }
+}
+
+backToArtifactsBtn.addEventListener('click', () => {
+  artifactViewer.hidden = true;
+  artifactsList.hidden = false;
+});
+
+async function loadArtifacts() {
+  artifactsList.hidden = false;
+  artifactViewer.hidden = true;
+  artifactsList.textContent = 'Loading…';
+  try {
+    const res = await controlFetch(`${CHAT_URL}/artifacts?user_id=${encodeURIComponent(state.userId)}`);
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const artifacts = await res.json();
+
+    artifactsList.innerHTML = '';
+    if (!artifacts.length) {
+      artifactsList.textContent = 'No artifacts yet — ask the dev or general agent to create one.';
+      return;
+    }
+    for (const a of artifacts) {
+      const item = document.createElement('div');
+      item.className = 'artifact-item';
+      const title = document.createElement('span');
+      title.className = 'title';
+      title.textContent = a.title;
+      const meta = document.createElement('span');
+      meta.className = 'meta';
+      meta.textContent = `${a.kind} · ${a.project} · ${formatRelativeDate(a.created_at)}`;
+      item.appendChild(title);
+      item.appendChild(meta);
+      item.addEventListener('click', () => openArtifact(a.id));
+      artifactsList.appendChild(item);
+    }
+  } catch (err) {
+    artifactsList.textContent = `Could not load artifacts: ${err.message}. Is your server connected?`;
+  }
+}
+
+artifactsBtn.addEventListener('click', () => {
+  openPanel(artifactsPanel);
+  loadArtifacts();
+});
+
+// ---- Connector OAuth redirect feedback ----
+
+(function handleConnectorRedirect() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.has('connected')) {
+    setBanner(`${params.get('connected')} connected.`);
+    setTimeout(() => setBanner(null), 4000);
+    window.history.replaceState({}, '', window.location.pathname);
+  } else if (params.has('connector_error')) {
+    setBanner(`Connector error: ${params.get('connector_error')}`);
+    window.history.replaceState({}, '', window.location.pathname);
+  }
+})();
 
 // ---- Push notifications ----
 

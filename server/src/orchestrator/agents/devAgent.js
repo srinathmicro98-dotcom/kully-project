@@ -2,33 +2,47 @@ import { buildMessages } from './agentInterface.js';
 import { runToolLoop } from './toolLoop.js';
 import { getSystemPrompt } from '../../memory/agentConfigStore.js';
 import { listSkillsMenu, getSkillBody } from '../../memory/skillStore.js';
+import { listToolConfig } from '../../memory/toolConfigStore.js';
 import { callCodeRunner } from '../../llm/codeRunnerClient.js';
 import { githubReadFile, githubWriteFile, githubListFiles, githubCreatePullRequest } from '../../llm/githubClient.js';
-import { SCRAPE_TOOL, handleScrapeTool } from './sharedTools.js';
+import { gmailSearch, gmailRead, gmailCreateDraft, driveListFiles, driveReadFile, driveWriteFile } from '../../llm/googleClient.js';
+import { SCRAPE_TOOL, handleScrapeTool, CREATE_ARTIFACT_TOOL, handleCreateArtifactTool } from './sharedTools.js';
 import { config } from '../../config.js';
 import { logger } from '../../utils/logger.js';
 
 export const name = 'dev';
 
 const GITHUB_ENABLED = !!config.githubToken;
+const GOOGLE_ENABLED = !!config.googleClientId;
+const MAX_TOOL_ITERATIONS = 10;
 
 export const DEFAULT_SYSTEM_PROMPT = `You are the dev/build specialist on the user's AI cofounder team. \
 You help with code, debugging, architecture, and technical build decisions — including scaffolding and \
 building complete small applications, not just snippets. Be concrete and give runnable code or exact \
 commands where relevant. Keep answers focused, not padded. \
+For anything beyond a trivial one-file change: explore first (list_files/read_file, or github_list_files/ \
+github_read_file for a real repo) before editing, make coordinated changes across the files that actually \
+need them, then verify with run_shell (run tests/a build) before declaring it done — don't guess blind. \
 You have real tools — run_code, read_file, write_file, list_files, run_shell — that operate in a \
 sandboxed workspace persisting across turns for this user's current project. The sandbox supports real \
 dependency installs (npm install, pip install) and can run test suites/builds — dependency directories \
 (node_modules, .venv, etc.) don't persist between calls, so install them again within the same run_shell \
-call that needs them (e.g. "npm install && npm test"). Use these tools whenever running/inspecting real \
-code would give a more reliable answer than reasoning about it, instead of just describing what the code \
-would do. Use scrape_url to look up real documentation or examples from the web when useful. Use use_skill \
-when a listed skill matches what's being asked.${
+call that needs them (e.g. "npm install && npm test"). Use scrape_url to look up real documentation or \
+examples from the web when useful. Use use_skill when a listed skill matches what's being asked. Use \
+create_artifact for a substantial finished piece of output (a full file, a report, a design doc) that the \
+user would want to view/save on its own — not for short snippets inline in your reply.${
   GITHUB_ENABLED
     ? ' You also have github_read_file, github_write_file, github_list_files, and github_create_pr for ' +
       'working against a real GitHub repo (owner/repo the user names). You can NEVER write directly to ' +
       "the repo's default branch — always work on a feature branch (e.g. kully/<short-topic>) and open a " +
       'PR with github_create_pr when the change is ready for review.'
+    : ''
+}${
+  GOOGLE_ENABLED
+    ? ' You also have gmail_search, gmail_read, gmail_create_draft, drive_list_files, drive_read_file, ' +
+      'and drive_write_file for the user\'s connected Google account (if not connected yet, the tool will ' +
+      "say so). gmail_create_draft only ever creates a Gmail DRAFT — it never sends email on the user's " +
+      'behalf; tell them the draft is ready to review and send themselves.'
     : ''
 }`;
 
@@ -125,6 +139,7 @@ const TOOLS = [
     },
   },
   SCRAPE_TOOL,
+  CREATE_ARTIFACT_TOOL,
   ...(GITHUB_ENABLED
     ? [
         {
@@ -202,9 +217,100 @@ const TOOLS = [
         },
       ]
     : []),
+  ...(GOOGLE_ENABLED
+    ? [
+        {
+          type: 'function',
+          function: {
+            name: 'gmail_search',
+            description: 'Search the user\'s Gmail (Gmail search syntax, e.g. "from:boss@x.com is:unread").',
+            parameters: {
+              type: 'object',
+              properties: { query: { type: 'string' } },
+              required: ['query'],
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'gmail_read',
+            description: 'Read one email by its message id (from gmail_search results).',
+            parameters: {
+              type: 'object',
+              properties: { messageId: { type: 'string' } },
+              required: ['messageId'],
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'gmail_create_draft',
+            description: "Create a Gmail draft (never sends). The user reviews and sends it themselves.",
+            parameters: {
+              type: 'object',
+              properties: {
+                to: { type: 'string' },
+                subject: { type: 'string' },
+                body: { type: 'string' },
+              },
+              required: ['to', 'subject', 'body'],
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'drive_list_files',
+            description: 'List files in the user\'s Google Drive, optionally filtered by a Drive API query.',
+            parameters: {
+              type: 'object',
+              properties: { query: { type: ['string', 'null'], description: 'e.g. "name contains \'report\'"' } },
+              required: [],
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'drive_read_file',
+            description: 'Read a file from Google Drive (Docs export as plain text, Sheets as CSV).',
+            parameters: {
+              type: 'object',
+              properties: { fileId: { type: 'string' } },
+              required: ['fileId'],
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'drive_write_file',
+            description: 'Create a new file in Drive, or overwrite an existing one if fileId is given.',
+            parameters: {
+              type: 'object',
+              properties: {
+                fileId: { type: ['string', 'null'], description: 'Omit/null to create a new file.' },
+                name: { type: ['string', 'null'], description: 'Required when creating a new file.' },
+                content: { type: 'string' },
+                mimeType: { type: ['string', 'null'], description: 'Defaults to text/plain.' },
+              },
+              required: ['content'],
+            },
+          },
+        },
+      ]
+    : []),
 ];
 
-async function dispatch(call, ctx) {
+export const ALL_TOOL_NAMES = TOOLS.map((t) => t.function.name);
+
+async function dispatch(call, ctx, enabledNames) {
+  if (!enabledNames.has(call.function.name)) {
+    return { error: `the ${call.function.name} tool is currently disabled in Plugins settings` };
+  }
+
   const args = JSON.parse(call.function.arguments);
 
   switch (call.function.name) {
@@ -224,6 +330,8 @@ async function dispatch(call, ctx) {
     }
     case 'scrape_url':
       return handleScrapeTool(args);
+    case 'create_artifact':
+      return handleCreateArtifactTool(args, ctx);
     case 'github_read_file':
       return githubReadFile(args);
     case 'github_list_files':
@@ -232,6 +340,18 @@ async function dispatch(call, ctx) {
       return githubWriteFile(args);
     case 'github_create_pr':
       return githubCreatePullRequest(args);
+    case 'gmail_search':
+      return gmailSearch(ctx.userId, args.query);
+    case 'gmail_read':
+      return gmailRead(ctx.userId, args.messageId);
+    case 'gmail_create_draft':
+      return gmailCreateDraft(ctx.userId, args);
+    case 'drive_list_files':
+      return driveListFiles(ctx.userId, args.query);
+    case 'drive_read_file':
+      return driveReadFile(ctx.userId, args.fileId);
+    case 'drive_write_file':
+      return driveWriteFile(ctx.userId, args);
     default:
       return { error: `unknown tool: ${call.function.name}` };
   }
@@ -256,6 +376,21 @@ export async function handle(ctx) {
   const systemPrompt = basePrompt + skillsMenuText;
   const messages = buildMessages({ systemPrompt, ctx });
 
-  const reply = await runToolLoop({ messages, tools: TOOLS, dispatch: (call) => dispatch(call, ctx) });
+  let enabledNames = new Set(ALL_TOOL_NAMES);
+  let activeTools = TOOLS;
+  try {
+    const toolConfig = await listToolConfig(ALL_TOOL_NAMES);
+    enabledNames = new Set(toolConfig.filter((t) => t.enabled).map((t) => t.name));
+    activeTools = TOOLS.filter((t) => enabledNames.has(t.function.name));
+  } catch (err) {
+    logger.warn('tool config unavailable, defaulting all tools enabled:', err.message);
+  }
+
+  const reply = await runToolLoop({
+    messages,
+    tools: activeTools,
+    dispatch: (call) => dispatch(call, ctx, enabledNames),
+    maxIterations: MAX_TOOL_ITERATIONS,
+  });
   return { reply };
 }
