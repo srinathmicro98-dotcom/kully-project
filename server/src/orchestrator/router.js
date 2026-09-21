@@ -7,9 +7,12 @@ running code, reading/writing a file, executing a shell command, or invoking a n
 dev agent has those tools). If the message mentions a filename, a function, a stack trace, "run"/"test"/ \
 "debug"/"refactor" something, or references a skill by name, that's dev, even if it's also asking for an \
 explanation.
-- search: needs current/live information (news, prices, "latest", real-time facts).
-- general: everything else (conversation, planning, brainstorming, advice) — NOT tasks that need actual \
-code execution or file access, even if phrased conversationally.
+- search: needs current/live information from the EXTERNAL web (news, prices, "latest", real-time facts). \
+NOT for recalling the user's own past notes/decisions/projects — "search across my projects" or "did I \
+decide this before" is about the user's own remembered facts, not the live web, so that's general, not search.
+- general: everything else (conversation, planning, brainstorming, advice, recalling the user's own past \
+notes/decisions across their projects) — NOT tasks that need actual code execution or file access, even if \
+phrased conversationally.
 Reply with only the single label word, nothing else.`;
 
 /**
