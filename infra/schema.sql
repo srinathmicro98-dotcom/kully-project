@@ -8,6 +8,7 @@ create table conversations (
   user_id text not null,
   project text not null default 'default',
   title text,
+  summary text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -85,6 +86,23 @@ create table artifacts (
 );
 create index on artifacts (user_id, project, created_at);
 
+create table app_settings (
+  key text primary key,
+  value text not null,
+  updated_at timestamptz not null default now()
+);
+
+create table usage_log (
+  id uuid primary key default gen_random_uuid(),
+  user_id text not null,
+  model text not null,
+  kind text not null check (kind in ('chat', 'image_gen')),
+  prompt_tokens int not null default 0,
+  completion_tokens int not null default 0,
+  created_at timestamptz not null default now()
+);
+create index on usage_log (user_id, created_at);
+
 create table connectors (
   user_id text not null,
   provider text not null,
@@ -110,5 +128,20 @@ language sql stable as $$
   order by
     case when match_project is not null and project = match_project then 0 else 1 end,
     embedding <=> query_embedding
+  limit match_count;
+$$;
+
+-- Cross-project recall: match_facts (above) prefers/limits to one project;
+-- this variant searches every project the user has facts in.
+create or replace function match_facts_global(
+  query_embedding vector(1024),
+  match_user_id text,
+  match_count int default 5
+) returns table (id uuid, content text, project text, fact_type text, similarity float)
+language sql stable as $$
+  select id, content, project, fact_type, 1 - (embedding <=> query_embedding) as similarity
+  from facts
+  where user_id = match_user_id and embedding is not null
+  order by embedding <=> query_embedding
   limit match_count;
 $$;

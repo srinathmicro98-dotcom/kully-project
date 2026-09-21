@@ -16,6 +16,7 @@ export async function extractAndStoreFacts({ userId, project, userMessage, assis
       temperature: 0,
       maxTokens: 600,
       reasoningEffort: 'low',
+      userId,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: `User: ${userMessage}\nAssistant: ${assistantReply}` },

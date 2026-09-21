@@ -10,6 +10,7 @@ import {
 } from '../memory/conversationStore.js';
 import { findRelevantFacts } from '../memory/factStore.js';
 import { extractAndStoreFacts } from '../memory/factExtractor.js';
+import { maybeSummarizeConversation } from '../memory/conversationSummarizer.js';
 import { callCodeRunner } from '../llm/codeRunnerClient.js';
 import { logger } from '../utils/logger.js';
 
@@ -58,6 +59,11 @@ chatRouter.post('/chat', async (req, res) => {
       logger.warn('fact recall skipped:', err.message);
     }
 
+    // Only kicks in once the conversation is genuinely long — condenses
+    // everything before the recent-history window so long threads don't
+    // silently lose earlier context.
+    const conversationSummary = await maybeSummarizeConversation({ conversationId, userId });
+
     // Images go straight to the agent as vision content. Non-image files
     // (csv/xlsx/pdf/etc) land in the sandbox workspace for the dev agent's
     // existing tools to inspect — only dev has sandbox access, so route
@@ -99,7 +105,7 @@ chatRouter.post('/chat', async (req, res) => {
       agentName = 'dev';
       raw = '(forced: non-image attachment)';
     } else {
-      ({ agent: agentName, raw } = await classify(message));
+      ({ agent: agentName, raw } = await classify(message, userId));
     }
     await logRouting({ messageId: userMessageId, classifiedAgent: agentName, rawModelOutput: raw });
 
@@ -112,6 +118,7 @@ chatRouter.post('/chat', async (req, res) => {
         : message,
       history,
       relevantFacts,
+      conversationSummary,
       images: images.length ? images : undefined,
       generatedImages: [],
     };

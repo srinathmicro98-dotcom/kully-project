@@ -43,6 +43,8 @@ const downloadArtifactBtn = document.getElementById('downloadArtifactBtn');
 const artifactContent = document.getElementById('artifactContent');
 const toolsList = document.getElementById('toolsList');
 const connectorsList = document.getElementById('connectorsList');
+const responseStyleToggle = document.getElementById('responseStyleToggle');
+const usageSummary = document.getElementById('usageSummary');
 const fileInput = document.getElementById('fileInput');
 const attachBtn = document.getElementById('attachBtn');
 const micBtn = document.getElementById('micBtn');
@@ -530,6 +532,8 @@ skillsBtn.addEventListener('click', () => {
   loadSkillsLibrary();
   loadTools();
   loadConnectors();
+  loadResponseStyle();
+  loadUsage();
 });
 
 // ---- Skills library (invokable skills, not just agent prompts) ----
@@ -868,6 +872,55 @@ async function loadTools() {
     }
   } catch (err) {
     toolsList.textContent = `Could not load plugins: ${err.message}. Is your server connected?`;
+  }
+}
+
+// ---- Response style ----
+
+async function loadResponseStyle() {
+  try {
+    const res = await controlFetch(`${CHAT_URL}/settings/response_style`);
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const { value } = await res.json();
+    responseStyleToggle.checked = value === 'detailed';
+  } catch {
+    // best-effort; leave the toggle at its current state
+  }
+}
+
+responseStyleToggle.addEventListener('change', async () => {
+  const value = responseStyleToggle.checked ? 'detailed' : 'concise';
+  try {
+    const res = await controlFetch(`${CHAT_URL}/settings/response_style`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value }),
+    });
+    if (!res.ok) throw new Error(`status ${res.status}`);
+  } catch (err) {
+    responseStyleToggle.checked = !responseStyleToggle.checked;
+    alert(`Could not save: ${err.message}`);
+  }
+});
+
+// ---- Usage ----
+
+async function loadUsage() {
+  usageSummary.textContent = 'Loading…';
+  try {
+    const res = await controlFetch(`${CHAT_URL}/usage/summary?user_id=${encodeURIComponent(state.userId)}`);
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const u = await res.json();
+    usageSummary.innerHTML = '';
+    const row = document.createElement('div');
+    row.className = 'connector-row';
+    row.style.display = 'block';
+    row.innerHTML =
+      `<div>${u.totalTokens.toLocaleString()} tokens &middot; ~$${u.estimatedCostUsd.toFixed(4)} &middot; ${u.imageGenCount} image${u.imageGenCount === 1 ? '' : 's'} generated</div>` +
+      `<div style="color:var(--muted);font-size:11px;margin-top:4px;">Last ${u.sinceDays} days &middot; Groq token cost only (image gen is free)</div>`;
+    usageSummary.appendChild(row);
+  } catch (err) {
+    usageSummary.textContent = `Could not load usage: ${err.message}. Is your server connected?`;
   }
 }
 

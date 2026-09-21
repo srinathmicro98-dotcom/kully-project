@@ -1,5 +1,6 @@
 import Groq from 'groq-sdk';
 import { config } from '../config.js';
+import { logUsage } from '../memory/usageStore.js';
 
 const groq = new Groq({ apiKey: config.groqApiKey });
 
@@ -29,6 +30,7 @@ export async function chatCompletion({
   temperature = 0.7,
   maxTokens = 1024,
   reasoningEffort = 'medium',
+  userId,
 }) {
   const res = await groq.chat.completions.create({
     model,
@@ -38,6 +40,9 @@ export async function chatCompletion({
     reasoning_effort: reasoningEffort,
     reasoning_format: 'hidden',
   });
+  if (userId && res.usage) {
+    logUsage({ userId, model, kind: 'chat', promptTokens: res.usage.prompt_tokens, completionTokens: res.usage.completion_tokens });
+  }
   return res.choices[0]?.message?.content ?? '';
 }
 
@@ -52,6 +57,7 @@ export async function chatCompletionWithTools({
   temperature = 0.4,
   maxTokens = 1024,
   reasoningEffort = 'medium',
+  userId,
 }) {
   const res = await groq.chat.completions.create({
     model,
@@ -63,6 +69,9 @@ export async function chatCompletionWithTools({
     reasoning_effort: reasoningEffort,
     reasoning_format: 'hidden',
   });
+  if (userId && res.usage) {
+    logUsage({ userId, model, kind: 'chat', promptTokens: res.usage.prompt_tokens, completionTokens: res.usage.completion_tokens });
+  }
   return res.choices[0]?.message;
 }
 

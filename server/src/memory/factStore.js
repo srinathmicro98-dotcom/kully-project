@@ -39,6 +39,20 @@ export async function findRelevantFacts({ userId, project, query, matchCount = 5
   return data;
 }
 
+// Unlike findRelevantFacts, searches every project the user has facts in —
+// for an explicit "did I decide this anywhere before" query, not the normal
+// same-project-biased recall used on every turn.
+export async function findRelevantFactsGlobal({ userId, query, matchCount = 5 }) {
+  const queryEmbedding = await embedOne(query, 'search_query');
+  const { data, error } = await supabase.rpc('match_facts_global', {
+    query_embedding: queryEmbedding,
+    match_user_id: userId,
+    match_count: matchCount,
+  });
+  if (error) throw error;
+  return data;
+}
+
 // Recent-first, no embedding search — powers the Projects panel's "what does
 // Kully remember about this project" view.
 export async function listFactsForProject({ userId, project, limit = 20 }) {

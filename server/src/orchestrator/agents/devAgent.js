@@ -11,6 +11,7 @@ import {
   SCRAPE_TOOL, handleScrapeTool,
   CREATE_ARTIFACT_TOOL, handleCreateArtifactTool,
   GENERATE_IMAGE_TOOL, handleGenerateImageTool,
+  RECALL_ACROSS_PROJECTS_TOOL, handleRecallAcrossProjectsTool,
 } from './sharedTools.js';
 import { config } from '../../config.js';
 import { logger } from '../../utils/logger.js';
@@ -157,6 +158,7 @@ const TOOLS = [
   SCRAPE_TOOL,
   CREATE_ARTIFACT_TOOL,
   GENERATE_IMAGE_TOOL,
+  RECALL_ACROSS_PROJECTS_TOOL,
   ...(GITHUB_ENABLED
     ? [
         {
@@ -351,6 +353,8 @@ async function dispatch(call, ctx, enabledNames) {
       return handleCreateArtifactTool(args, ctx);
     case 'generate_image':
       return handleGenerateImageTool(args, ctx);
+    case 'recall_across_projects':
+      return handleRecallAcrossProjectsTool(args, ctx);
     case 'github_read_file':
       return githubReadFile(args);
     case 'github_list_files':
@@ -385,8 +389,8 @@ export async function handle(ctx) {
   // models here aren't the vision-capable one, and a "what's in this photo"
   // question rarely also needs sandbox tools in the same turn.
   if (ctx.images?.length) {
-    const messages = buildMessages({ systemPrompt: basePrompt, ctx });
-    const reply = await chatCompletion({ model: MODELS.vision, messages, maxTokens: 400 });
+    const messages = await buildMessages({ systemPrompt: basePrompt, ctx });
+    const reply = await chatCompletion({ model: MODELS.vision, messages, maxTokens: 400, userId: ctx.userId });
     return { reply };
   }
 
@@ -403,7 +407,7 @@ export async function handle(ctx) {
   }
 
   const systemPrompt = basePrompt + skillsMenuText;
-  const messages = buildMessages({ systemPrompt, ctx });
+  const messages = await buildMessages({ systemPrompt, ctx });
 
   let enabledNames = new Set(ALL_TOOL_NAMES);
   let activeTools = TOOLS;
@@ -420,6 +424,7 @@ export async function handle(ctx) {
     tools: activeTools,
     dispatch: (call) => dispatch(call, ctx, enabledNames),
     maxIterations: MAX_TOOL_ITERATIONS,
+    userId: ctx.userId,
   });
   return { reply };
 }

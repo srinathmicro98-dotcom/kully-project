@@ -28,8 +28,8 @@ async function dispatch(call) {
 export async function handle(ctx) {
   if (ctx.images?.length) {
     const systemPrompt = await getSystemPrompt(name, DEFAULT_SYSTEM_PROMPT);
-    const messages = buildMessages({ systemPrompt, ctx });
-    const reply = await chatCompletion({ model: MODELS.vision, messages, maxTokens: 400 });
+    const messages = await buildMessages({ systemPrompt, ctx });
+    const reply = await chatCompletion({ model: MODELS.vision, messages, maxTokens: 400, userId: ctx.userId });
     return { reply };
   }
 
@@ -47,8 +47,8 @@ export async function handle(ctx) {
   }
 
   const systemPrompt = await getSystemPrompt(name, DEFAULT_SYSTEM_PROMPT);
-  const messages = buildMessages({ systemPrompt, ctx, extra });
+  const messages = await buildMessages({ systemPrompt, ctx, extra });
 
-  const reply = await runToolLoop({ messages, tools: TOOLS, dispatch, maxIterations: 3, temperature: 0.3 });
+  const reply = await runToolLoop({ messages, tools: TOOLS, dispatch, maxIterations: 3, temperature: 0.3, userId: ctx.userId });
   return { reply };
 }

@@ -7,9 +7,9 @@ import { logger } from '../../utils/logger.js';
  * plain answer or `maxIterations` is exhausted (then forces one final
  * no-tools reply so the user always gets something back).
  */
-export async function runToolLoop({ messages, tools, dispatch, maxIterations = 4, temperature = 0.4 }) {
+export async function runToolLoop({ messages, tools, dispatch, maxIterations = 4, temperature = 0.4, userId }) {
   for (let i = 0; i < maxIterations; i++) {
-    const message = await chatCompletionWithTools({ model: MODELS.smart, messages, tools, temperature });
+    const message = await chatCompletionWithTools({ model: MODELS.smart, messages, tools, temperature, userId });
 
     if (!message.tool_calls?.length) {
       return message.content ?? '';
@@ -29,6 +29,6 @@ export async function runToolLoop({ messages, tools, dispatch, maxIterations = 4
     }
   }
 
-  const finalMessage = await chatCompletionWithTools({ model: MODELS.smart, messages, temperature });
+  const finalMessage = await chatCompletionWithTools({ model: MODELS.smart, messages, temperature, userId });
   return finalMessage.content || "I ran out of tool-call turns — here's what I found so far.";
 }

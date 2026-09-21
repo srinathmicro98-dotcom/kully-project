@@ -15,12 +15,13 @@ Reply with only the single label word, nothing else.`;
 /**
  * @returns {Promise<{agent: string, raw: string}>}
  */
-export async function classify(message) {
+export async function classify(message, userId) {
   const raw = await chatCompletion({
     model: MODELS.fast,
     temperature: 0,
     maxTokens: 60,
     reasoningEffort: 'low',
+    userId,
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: message },

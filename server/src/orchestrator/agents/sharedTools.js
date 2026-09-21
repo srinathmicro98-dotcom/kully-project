@@ -1,5 +1,7 @@
 import { scrapeUrl } from '../../llm/scraperClient.js';
 import { createArtifact } from '../../memory/artifactStore.js';
+import { logUsage } from '../../memory/usageStore.js';
+import { findRelevantFactsGlobal } from '../../memory/factStore.js';
 
 export const SCRAPE_TOOL = {
   type: 'function',
@@ -104,9 +106,31 @@ export async function handleGenerateImageTool(args, ctx) {
     language: null,
     content: dataUri,
   });
+  logUsage({ userId: ctx.userId, model: 'pollinations', kind: 'image_gen' });
 
   ctx.generatedImages = ctx.generatedImages || [];
   ctx.generatedImages.push(dataUri);
 
   return { ok: true, artifactId: artifact.id, title: artifact.title };
+}
+
+export const RECALL_ACROSS_PROJECTS_TOOL = {
+  type: 'function',
+  function: {
+    name: 'recall_across_projects',
+    description:
+      'Search the user\'s memory across ALL of their projects, not just the current one — use this when ' +
+      'asked something like "did I decide this anywhere before" that the current project\'s own memory ' +
+      'might not cover.',
+    parameters: {
+      type: 'object',
+      properties: { query: { type: 'string' } },
+      required: ['query'],
+    },
+  },
+};
+
+export async function handleRecallAcrossProjectsTool(args, ctx) {
+  const facts = await findRelevantFactsGlobal({ userId: ctx.userId, query: args.query });
+  return { facts };
 }

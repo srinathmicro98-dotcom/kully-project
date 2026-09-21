@@ -78,6 +78,37 @@ export async function getRecentMessages(conversationId, limit = 10) {
   return data.reverse();
 }
 
+export async function countMessages(conversationId) {
+  const { count, error } = await supabase
+    .from('messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('conversation_id', conversationId);
+  if (error) throw error;
+  return count ?? 0;
+}
+
+export async function getConversationSummary(conversationId) {
+  const { data, error } = await supabase
+    .from('conversations')
+    .select('summary')
+    .eq('id', conversationId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.summary ?? null;
+}
+
+export async function setConversationSummary(conversationId, summary) {
+  const { error } = await supabase.from('conversations').update({ summary }).eq('id', conversationId);
+  if (error) throw error;
+}
+
+// Every message except the most recent `keepRecent` — the chunk that's about
+// to age out of the model's directly-visible history window.
+export async function getMessagesForSummary(conversationId, keepRecent = 10) {
+  const all = await getMessages(conversationId);
+  return all.slice(0, Math.max(0, all.length - keepRecent));
+}
+
 export async function logRouting({ messageId, classifiedAgent, rawModelOutput }) {
   const { error } = await supabase.from('routing_logs').insert({
     message_id: messageId,
