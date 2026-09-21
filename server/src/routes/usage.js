@@ -9,5 +9,9 @@ usageRouter.get('/usage/summary', async (req, res) => {
     return res.status(400).json({ error: 'user_id is required' });
   }
   const sinceDays = Number(req.query.since_days) || 30;
-  res.json(await getUsageSummary({ userId, sinceDays }));
+  try {
+    res.json(await getUsageSummary({ userId, sinceDays }));
+  } catch (err) {
+    res.status(503).json({ error: `usage tracking unavailable: ${err.message}` });
+  }
 });

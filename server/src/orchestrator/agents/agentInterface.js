@@ -41,7 +41,13 @@ const RESPONSE_STYLE_DIRECTIVES = {
  * @param {{systemPrompt: string, ctx: AgentContext, extra?: string}} args
  */
 export async function buildMessages({ systemPrompt, ctx, extra }) {
-  const style = await getSetting('response_style', 'concise');
+  let style = 'concise';
+  try {
+    style = await getSetting('response_style', 'concise');
+  } catch {
+    // app_settings unavailable (e.g. migration not yet applied) — fall back
+    // to the default rather than breaking every chat request over a setting.
+  }
   const directive = RESPONSE_STYLE_DIRECTIVES[style] || RESPONSE_STYLE_DIRECTIVES.concise;
   const messages = [{ role: 'system', content: `${systemPrompt}\n\n${directive}` }];
 

@@ -6,7 +6,11 @@ export const settingsRouter = Router();
 const KNOWN_KEYS = new Set(['response_style']);
 
 settingsRouter.get('/settings/response_style', async (_req, res) => {
-  res.json({ value: await getSetting('response_style', 'concise') });
+  try {
+    res.json({ value: await getSetting('response_style', 'concise') });
+  } catch (err) {
+    res.status(503).json({ error: `settings unavailable: ${err.message}` });
+  }
 });
 
 settingsRouter.put('/settings/:key', async (req, res) => {
