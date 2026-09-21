@@ -2,6 +2,9 @@ import { scrapeUrl } from '../../llm/scraperClient.js';
 import { createArtifact } from '../../memory/artifactStore.js';
 import { logUsage } from '../../memory/usageStore.js';
 import { findRelevantFactsGlobal } from '../../memory/factStore.js';
+import { callCodeRunner } from '../../llm/codeRunnerClient.js';
+
+const IMAGE_MIME_TYPES = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', svg: 'image/svg+xml', webp: 'image/webp' };
 
 export const SCRAPE_TOOL = {
   type: 'function',
@@ -107,6 +110,58 @@ export async function handleGenerateImageTool(args, ctx) {
     content: dataUri,
   });
   logUsage({ userId: ctx.userId, model: 'pollinations', kind: 'image_gen' });
+
+  ctx.generatedImages = ctx.generatedImages || [];
+  ctx.generatedImages.push(dataUri);
+
+  return { ok: true, artifactId: artifact.id, title: artifact.title };
+}
+
+export const SAVE_CHART_TOOL = {
+  type: 'function',
+  function: {
+    name: 'save_chart',
+    description:
+      'Save an image file you already wrote to the sandbox workspace (e.g. a matplotlib chart) as a ' +
+      'viewable artifact. The file\'s bytes are read directly from the sandbox on the server side — do ' +
+      'NOT read the file yourself first and pass its content here, that wastes a huge number of tokens ' +
+      'and will hit rate limits; just give the path and this tool handles reading it.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Path to the image file in the sandbox workspace, e.g. "chart.png".' },
+        language: { type: 'string', enum: ['node', 'python'], description: 'Which sandbox the file was written in.' },
+        title: { type: 'string' },
+      },
+      required: ['path', 'language', 'title'],
+    },
+  },
+};
+
+export async function handleSaveChartTool(args, ctx) {
+  const result = await callCodeRunner({
+    action: 'read_file',
+    language: args.language,
+    path: args.path,
+    encoding: 'base64',
+    userId: ctx.userId,
+    project: ctx.project,
+  });
+  if (result.error) return result;
+
+  const ext = args.path.split('.').pop().toLowerCase();
+  const mimeType = IMAGE_MIME_TYPES[ext] || 'image/png';
+  const dataUri = `data:${mimeType};base64,${result.content}`;
+
+  const artifact = await createArtifact({
+    userId: ctx.userId,
+    project: ctx.project,
+    conversationId: ctx.conversationId,
+    title: args.title,
+    kind: 'image',
+    language: null,
+    content: dataUri,
+  });
 
   ctx.generatedImages = ctx.generatedImages || [];
   ctx.generatedImages.push(dataUri);

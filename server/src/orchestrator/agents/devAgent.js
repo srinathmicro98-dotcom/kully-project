@@ -11,6 +11,7 @@ import {
   SCRAPE_TOOL, handleScrapeTool,
   CREATE_ARTIFACT_TOOL, handleCreateArtifactTool,
   GENERATE_IMAGE_TOOL, handleGenerateImageTool,
+  SAVE_CHART_TOOL, handleSaveChartTool,
   RECALL_ACROSS_PROJECTS_TOOL, handleRecallAcrossProjectsTool,
 } from './sharedTools.js';
 import { config } from '../../config.js';
@@ -41,11 +42,13 @@ image, ALWAYS call the generate_image tool to get a real generated picture — n
 SVG/base64 approximation yourself and pass that to create_artifact instead, the user asked for a generated \
 image, not primitive shapes. When an uploaded data file (CSV/Excel) is mentioned as \
 available in your workspace (under uploads/), install what you need (pandas/matplotlib/openpyxl via pip) \
-to actually analyze it, save any chart with matplotlib's savefig, read the PNG back via read_file with \
-encoding:"base64", and hand it to the user with create_artifact using kind:"image" and \
-content:"data:image/png;base64,"+<the base64 you read back> — never fabricate numbers or a chart you \
-didn't actually compute. read_file/write_file take an optional encoding:"base64" for binary files \
-(images, spreadsheets); omit it for plain text.${
+to actually analyze it, save any chart with matplotlib's savefig to a file, then call save_chart with that \
+file's path — it reads the image straight from the sandbox and saves it as an artifact. Do NOT read a chart \
+image yourself via read_file and paste its content into create_artifact — that forces you to regenerate a \
+huge base64 blob as output tokens, which is slow and will hit rate limits; save_chart avoids that entirely. \
+never fabricate numbers or a chart you didn't actually compute. read_file/write_file take an optional \
+encoding:"base64" for binary files (images, spreadsheets) you need to inspect yourself; omit it for plain \
+text.${
   GITHUB_ENABLED
     ? ' You also have github_read_file, github_write_file, github_list_files, and github_create_pr for ' +
       'working against a real GitHub repo (owner/repo the user names). You can NEVER write directly to ' +
@@ -158,6 +161,7 @@ const TOOLS = [
   SCRAPE_TOOL,
   CREATE_ARTIFACT_TOOL,
   GENERATE_IMAGE_TOOL,
+  SAVE_CHART_TOOL,
   RECALL_ACROSS_PROJECTS_TOOL,
   ...(GITHUB_ENABLED
     ? [
@@ -353,6 +357,8 @@ async function dispatch(call, ctx, enabledNames) {
       return handleCreateArtifactTool(args, ctx);
     case 'generate_image':
       return handleGenerateImageTool(args, ctx);
+    case 'save_chart':
+      return handleSaveChartTool(args, ctx);
     case 'recall_across_projects':
       return handleRecallAcrossProjectsTool(args, ctx);
     case 'github_read_file':
