@@ -19,20 +19,35 @@ function emaSeries(values, period) {
   return series;
 }
 
+// Wilder's original smoothed RSI — recursive smoothing carried forward from
+// the start of the series, which is what brokers/TradingView actually show.
+// (A simpler "average of just the last N changes" variant exists too, but it
+// diverges from what a user would see on their own broker's chart, which
+// defeats the point of giving them real numbers.)
 function rsi(values, period = 14) {
   if (values.length < period + 1) return null;
-  let gains = 0;
-  let losses = 0;
-  for (let i = values.length - period; i < values.length; i++) {
+
+  let avgGain = 0;
+  let avgLoss = 0;
+  for (let i = 1; i <= period; i++) {
     const change = values[i] - values[i - 1];
-    if (change >= 0) gains += change;
-    else losses -= change;
+    if (change >= 0) avgGain += change;
+    else avgLoss -= change;
   }
-  const avgGain = gains / period;
-  const avgLoss = losses / period;
+  avgGain /= period;
+  avgLoss /= period;
+
+  for (let i = period + 1; i < values.length; i++) {
+    const change = values[i] - values[i - 1];
+    const gain = change >= 0 ? change : 0;
+    const loss = change < 0 ? -change : 0;
+    avgGain = (avgGain * (period - 1) + gain) / period;
+    avgLoss = (avgLoss * (period - 1) + loss) / period;
+  }
+
   if (avgLoss === 0) return 100;
   const rs = avgGain / avgLoss;
-  return 100 - 100 / (1 + rs);
+  return Math.round((100 - 100 / (1 + rs)) * 100) / 100;
 }
 
 function macd(values) {
@@ -50,7 +65,11 @@ function macd(values) {
   };
 }
 
-const RANGE_FOR_DAYS = (days) => (days <= 7 ? '1mo' : days <= 90 ? '6mo' : days <= 200 ? '1y' : '2y');
+// Wilder's smoothing and a 26-period EMA both need real warm-up history to
+// converge close to what a broker's own chart would show — always fetch at
+// least a year regardless of how many days the caller actually wants
+// displayed, and only truncate for display after computing on the full set.
+const RANGE_FOR_DAYS = (days) => (days > 365 ? '2y' : '1y');
 
 /**
  * Real NSE price history + computed technical indicators for one symbol.
