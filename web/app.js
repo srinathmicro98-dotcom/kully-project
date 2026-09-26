@@ -45,6 +45,12 @@ const toolsList = document.getElementById('toolsList');
 const connectorsList = document.getElementById('connectorsList');
 const responseStyleToggle = document.getElementById('responseStyleToggle');
 const usageSummary = document.getElementById('usageSummary');
+const scheduledTasksList = document.getElementById('scheduledTasksList');
+const newTaskPrompt = document.getElementById('newTaskPrompt');
+const newTaskType = document.getElementById('newTaskType');
+const newTaskTime = document.getElementById('newTaskTime');
+const newTaskDatetime = document.getElementById('newTaskDatetime');
+const addTaskBtn = document.getElementById('addTaskBtn');
 const fileInput = document.getElementById('fileInput');
 const attachBtn = document.getElementById('attachBtn');
 const micBtn = document.getElementById('micBtn');
@@ -534,6 +540,7 @@ skillsBtn.addEventListener('click', () => {
   loadConnectors();
   loadResponseStyle();
   loadUsage();
+  loadScheduledTasks();
 });
 
 // ---- Skills library (invokable skills, not just agent prompts) ----
@@ -923,6 +930,109 @@ async function loadUsage() {
     usageSummary.textContent = `Could not load usage: ${err.message}. Is your server connected?`;
   }
 }
+
+// ---- Scheduled check-ins ----
+
+newTaskType.addEventListener('change', () => {
+  const isOnce = newTaskType.value === 'once';
+  newTaskTime.hidden = isOnce;
+  newTaskDatetime.hidden = !isOnce;
+});
+
+async function loadScheduledTasks() {
+  scheduledTasksList.textContent = 'Loading…';
+  try {
+    const res = await controlFetch(`${CHAT_URL}/scheduled-tasks?user_id=${encodeURIComponent(state.userId)}`);
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const tasks = await res.json();
+
+    scheduledTasksList.innerHTML = '';
+    if (!tasks.length) {
+      scheduledTasksList.textContent = 'No scheduled check-ins yet.';
+      return;
+    }
+    for (const t of tasks) {
+      const row = document.createElement('div');
+      row.className = 'toggle-row';
+
+      const info = document.createElement('span');
+      info.className = 'tool-name';
+      const when = t.schedule_type === 'daily' ? `daily at ${t.time_of_day} UTC` : new Date(t.run_at).toLocaleString();
+      info.textContent = `${t.prompt.slice(0, 50)}${t.prompt.length > 50 ? '…' : ''} — ${when}`;
+      row.appendChild(info);
+
+      const label = document.createElement('label');
+      label.className = 'toggle-switch';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = t.enabled;
+      checkbox.addEventListener('change', async () => {
+        try {
+          const putRes = await controlFetch(`${CHAT_URL}/scheduled-tasks/${t.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: state.userId, enabled: checkbox.checked }),
+          });
+          if (!putRes.ok) throw new Error(`status ${putRes.status}`);
+        } catch (err) {
+          checkbox.checked = !checkbox.checked;
+          alert(`Could not save: ${err.message}`);
+        }
+      });
+      const slider = document.createElement('span');
+      slider.className = 'slider';
+      label.appendChild(checkbox);
+      label.appendChild(slider);
+      row.appendChild(label);
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.textContent = '✕';
+      deleteBtn.className = 'ghost-btn';
+      deleteBtn.addEventListener('click', async () => {
+        try {
+          const delRes = await controlFetch(`${CHAT_URL}/scheduled-tasks/${t.id}?user_id=${encodeURIComponent(state.userId)}`, { method: 'DELETE' });
+          if (!delRes.ok) throw new Error(`status ${delRes.status}`);
+          loadScheduledTasks();
+        } catch (err) {
+          alert(`Could not delete: ${err.message}`);
+        }
+      });
+      row.appendChild(deleteBtn);
+
+      scheduledTasksList.appendChild(row);
+    }
+  } catch (err) {
+    scheduledTasksList.textContent = `Could not load scheduled check-ins: ${err.message}. Is your server connected?`;
+  }
+}
+
+addTaskBtn.addEventListener('click', async () => {
+  const prompt = newTaskPrompt.value.trim();
+  if (!prompt) return alert('Enter what Kully should do.');
+
+  const body = { user_id: state.userId, project: state.project, prompt, schedule_type: newTaskType.value };
+  if (newTaskType.value === 'daily') {
+    if (!newTaskTime.value) return alert('Pick a time.');
+    body.time_of_day = newTaskTime.value;
+  } else {
+    if (!newTaskDatetime.value) return alert('Pick a date and time.');
+    body.run_at = new Date(newTaskDatetime.value).toISOString();
+  }
+
+  try {
+    const res = await controlFetch(`${CHAT_URL}/scheduled-tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    newTaskPrompt.value = '';
+    loadScheduledTasks();
+  } catch (err) {
+    alert(`Could not schedule: ${err.message}`);
+  }
+});
 
 // ---- Connectors ----
 

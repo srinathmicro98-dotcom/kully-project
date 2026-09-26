@@ -324,9 +324,87 @@ async function handleIdleCheck() {
   }
 }
 
+async function sendPush(userId, title, body) {
+  const { data } = await supabase.from('push_subscriptions').select('endpoint, keys_json').eq('user_id', userId);
+  const payloadStr = JSON.stringify({ title, body });
+  await Promise.all(
+    (data ?? []).map(async (row) => {
+      try {
+        await webpush.sendNotification(row.keys_json, payloadStr);
+      } catch (err) {
+        if (err.statusCode === 404 || err.statusCode === 410) {
+          await supabase.from('push_subscriptions').delete().eq('endpoint', row.endpoint);
+        }
+      }
+    }),
+  );
+}
+
+// Same tick as the idle-check (every 5 min) — due-task detection only needs
+// Supabase, which this Lambda already talks to directly, so it works even
+// while the EC2 box is stopped. Only actually RUNNING a task needs the box up.
+async function handleScheduledTasks() {
+  const { data: due, error } = await supabase
+    .from('scheduled_tasks')
+    .select('id, user_id, project, prompt, schedule_type, time_of_day')
+    .eq('enabled', true)
+    .lte('run_at', new Date().toISOString());
+  if (error || !due?.length) return { due: due?.length ?? 0 };
+
+  const state = await getInstanceState();
+  if (state === 'stopped') {
+    await ec2.send(new StartInstancesCommand({ InstanceIds: [INSTANCE_ID] }));
+    // Box takes a minute or two to boot — this tick just wakes it; the next
+    // 5-minute tick (once it's running) is what actually dispatches the tasks.
+    return { due: due.length, waking: true };
+  }
+  if (state !== 'running') {
+    return { due: due.length, state }; // 'pending'/'stopping' — try again next tick
+  }
+
+  const chatBase = new URL(process.env.CHAT_INTERNAL_URL).origin;
+  const results = [];
+  for (const task of due) {
+    try {
+      const res = await fetch(`${chatBase}/internal/run-scheduled-task`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Internal-Secret': process.env.INTERNAL_API_SECRET },
+        body: JSON.stringify({ user_id: task.user_id, project: task.project, prompt: task.prompt }),
+        signal: AbortSignal.timeout(100_000),
+      });
+      const { reply, error: runError } = await res.json();
+      if (!res.ok) throw new Error(runError || `status ${res.status}`);
+
+      await sendPush(task.user_id, 'Kully — scheduled check-in', reply.slice(0, 180));
+
+      const patch = { last_run_at: new Date().toISOString() };
+      if (task.schedule_type === 'once') {
+        patch.enabled = false;
+      } else {
+        const [h, m] = task.time_of_day.split(':').map(Number);
+        const next = new Date();
+        next.setUTCHours(h, m, 0, 0);
+        next.setUTCDate(next.getUTCDate() + 1); // always tomorrow — this run just consumed today's slot
+        patch.run_at = next.toISOString();
+      }
+      await supabase.from('scheduled_tasks').update(patch).eq('id', task.id);
+      results.push({ id: task.id, ok: true });
+    } catch (err) {
+      results.push({ id: task.id, error: String(err) });
+    }
+  }
+  return { due: due.length, results };
+}
+
 export const handler = async (event) => {
   if (!event.requestContext?.http) {
-    return handleIdleCheck();
+    // Sequential, not concurrent: dispatching a task doesn't touch the
+    // EC2 app's activity timer (it's an /internal/* call), so idle-check
+    // must run AFTER any due task has fully finished, never alongside it —
+    // otherwise it could stop the box mid-task.
+    const tasks = await handleScheduledTasks();
+    const idle = await handleIdleCheck();
+    return { idle, tasks };
   }
 
   const { method, path: reqPath } = event.requestContext.http;

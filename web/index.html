@@ -118,6 +118,20 @@
           <span class="slider"></span>
         </label>
       </div>
+      <h3 class="panel-section-title">Scheduled check-ins <span class="dim">— runs even while disconnected; may take up to ~10 min to fire from a cold start</span></h3>
+      <div id="scheduledTasksList"></div>
+      <div class="add-fact-form">
+        <textarea id="newTaskPrompt" placeholder="What should Kully do/tell you? e.g. &quot;Summarize anything new I should know about.&quot;"></textarea>
+        <div class="row">
+          <select id="newTaskType">
+            <option value="daily">Every day at</option>
+            <option value="once">Once at</option>
+          </select>
+          <input type="time" id="newTaskTime" />
+          <input type="datetime-local" id="newTaskDatetime" hidden />
+          <button type="button" id="addTaskBtn">Schedule</button>
+        </div>
+      </div>
       <h3 class="panel-section-title">Usage <span class="dim">— last 30 days, estimated</span></h3>
       <div id="usageSummary"></div>
     </div>
