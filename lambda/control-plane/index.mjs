@@ -11,6 +11,10 @@ import {
   StopInstancesCommand,
   DescribeInstancesCommand,
 } from '@aws-sdk/client-ec2';
+// Copied in from shared/marketIndicators.mjs by lambda/deploy.sh before every
+// zip/deploy — not checked into git here (see .gitignore), same pattern as
+// public/. Never hand-edit this file in lambda/control-plane/ directly.
+import { rsi } from './marketIndicators.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // The EC2 instance lives in ap-south-2; this Lambda runs in ap-south-1
@@ -480,33 +484,12 @@ async function handleScheduledTasks() {
   return { due: due.length, results };
 }
 
-// Self-contained NSE price/RSI check — deliberately duplicates the handful
-// of lines of indicator math from server/src/llm/marketDataClient.js rather
-// than importing across the Lambda/EC2 boundary (they're separately
-// deployed services with no shared build step). Keep both in sync if the
-// RSI method changes — see [[kully-scheduled-trading-video-agents]] memory
-// for why Wilder's smoothing specifically matters here.
-function wilderRsi14(closes) {
-  const period = 14;
-  if (closes.length < period + 1) return null;
-  let avgGain = 0;
-  let avgLoss = 0;
-  for (let i = 1; i <= period; i++) {
-    const change = closes[i] - closes[i - 1];
-    if (change >= 0) avgGain += change;
-    else avgLoss -= change;
-  }
-  avgGain /= period;
-  avgLoss /= period;
-  for (let i = period + 1; i < closes.length; i++) {
-    const change = closes[i] - closes[i - 1];
-    avgGain = (avgGain * (period - 1) + (change >= 0 ? change : 0)) / period;
-    avgLoss = (avgLoss * (period - 1) + (change < 0 ? -change : 0)) / period;
-  }
-  if (avgLoss === 0) return 100;
-  return 100 - 100 / (1 + avgGain / avgLoss);
-}
-
+// Self-contained NSE price/RSI check. The RSI math itself is NOT
+// hand-duplicated here anymore — it's imported from ./marketIndicators.mjs,
+// which lambda/deploy.sh copies in from the repo's shared/marketIndicators.mjs
+// before every deploy, so this Lambda and server/src/llm/marketDataClient.js
+// can never silently disagree on the formula again (they used to, and it
+// produced materially different RSI values — see ARCHITECTURE.md).
 async function fetchIndicatorValue(symbol, indicator) {
   const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}.NS?range=1y&interval=1d`, {
     headers: { 'User-Agent': 'Mozilla/5.0' },
@@ -518,7 +501,7 @@ async function fetchIndicatorValue(symbol, indicator) {
 
   if (indicator === 'price') return result.meta.regularMarketPrice;
   const closes = (result.indicators.quote[0].close ?? []).filter((v) => v != null);
-  return wilderRsi14(closes);
+  return rsi(closes, 14);
 }
 
 // Checked on the same 5-minute tick as everything else — pure market-data

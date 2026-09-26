@@ -2,6 +2,8 @@
 
 A multi-agent AI cofounder — text chat with persistent memory today, voice + mobile + Kubernetes later.
 
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the current system design, deploy steps, and hard-won gotchas.
+
 ## Phase 0+1 (this milestone)
 
 Router + three specialist agents (`dev`, `general`, `search`) backed by Groq (LLM), Supabase (Postgres+pgvector memory), Cohere (embeddings), and Tavily (web search). See `infra/` for deployment and `server/` for the orchestrator.

@@ -30,13 +30,18 @@ cp "$SCRIPT_DIR/../web/icon-512.png" "$CP_DIR/public/icon-512.png"
 cp "$SCRIPT_DIR/../web/apple-touch-icon.png" "$CP_DIR/public/apple-touch-icon.png"
 cp "$SCRIPT_DIR/../web/sw.js" "$CP_DIR/public/sw.js"
 
+echo "== copy shared indicator math =="
+# Keeps this Lambda's RSI/SMA/MACD math identical to server/'s copy — see
+# shared/marketIndicators.mjs for why this file must never be hand-forked.
+cp "$SCRIPT_DIR/../shared/marketIndicators.mjs" "$CP_DIR/marketIndicators.mjs"
+
 echo "== zip =="
 rm -f "$CP_DIR/function.zip"
 if command -v zip >/dev/null 2>&1; then
-  (cd "$CP_DIR" && zip -r -q function.zip index.mjs package.json node_modules public)
+  (cd "$CP_DIR" && zip -r -q function.zip index.mjs marketIndicators.mjs package.json node_modules public)
 else
   # Windows dev boxes often lack `zip` — fall back to PowerShell's Compress-Archive.
-  powershell.exe -NoProfile -Command "Compress-Archive -Path '$CP_DIR_NATIVE/index.mjs','$CP_DIR_NATIVE/package.json','$CP_DIR_NATIVE/node_modules','$CP_DIR_NATIVE/public' -DestinationPath '$CP_DIR_NATIVE/function.zip' -Force"
+  powershell.exe -NoProfile -Command "Compress-Archive -Path '$CP_DIR_NATIVE/index.mjs','$CP_DIR_NATIVE/marketIndicators.mjs','$CP_DIR_NATIVE/package.json','$CP_DIR_NATIVE/node_modules','$CP_DIR_NATIVE/public' -DestinationPath '$CP_DIR_NATIVE/function.zip' -Force"
 fi
 
 echo "== deploy =="
