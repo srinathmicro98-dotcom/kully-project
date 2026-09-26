@@ -197,6 +197,71 @@ async function handleNotifyReady(rawBody) {
   return json(200, { ok: true, notified: (data ?? []).length });
 }
 
+// Telegram connector — no OAuth, just a bot token + the user's chat id
+// (captured once they message the bot). Dormant until TELEGRAM_BOT_TOKEN is
+// set, same "build now, activate later" pattern as Google/GitHub elsewhere.
+const TELEGRAM_ENABLED = !!process.env.TELEGRAM_BOT_TOKEN;
+let cachedBotUsername = null;
+
+async function getTelegramBotUsername() {
+  if (cachedBotUsername) return cachedBotUsername;
+  const res = await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/getMe`);
+  const data = await res.json();
+  cachedBotUsername = data.result?.username;
+  return cachedBotUsername;
+}
+
+async function telegramSend(chatId, text) {
+  await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, text }),
+  });
+}
+
+async function handleTelegramStart(event) {
+  const token = event.queryStringParameters?.token;
+  if (!token) return json(401, { error: 'missing token' });
+  let userId;
+  try {
+    userId = jwt.verify(token, process.env.JWT_SECRET).sub;
+  } catch {
+    return json(401, { error: 'invalid token' });
+  }
+
+  const code = jwt.sign({ sub: userId, purpose: 'telegram-connect' }, process.env.JWT_SECRET, { expiresIn: '10m' });
+  const username = await getTelegramBotUsername();
+  if (!username) return json(500, { error: 'could not reach Telegram bot API' });
+  return { statusCode: 302, headers: { Location: `https://t.me/${username}?start=${encodeURIComponent(code)}` } };
+}
+
+// Telegram always expects a 200 back (regardless of what we made of the
+// message), or it'll keep retrying delivery of the same update.
+async function handleTelegramWebhook(headers, rawBody) {
+  if (headers['x-telegram-bot-api-secret-token'] !== process.env.TELEGRAM_WEBHOOK_SECRET) {
+    return json(401, { error: 'unauthorized' });
+  }
+  try {
+    const payload = JSON.parse(rawBody || '{}');
+    const chatId = payload.message?.chat?.id;
+    const text = payload.message?.text || '';
+    const match = text.match(/^\/start\s+(\S+)/);
+    if (chatId && match) {
+      const decoded = jwt.verify(match[1], process.env.JWT_SECRET);
+      if (decoded.purpose === 'telegram-connect') {
+        await supabase.from('connectors').upsert(
+          { user_id: decoded.sub, provider: 'telegram', access_token: String(chatId), updated_at: new Date().toISOString() },
+          { onConflict: 'user_id,provider' },
+        );
+        await telegramSend(chatId, 'Connected! Kully will send scheduled/background-task notifications here too.');
+      }
+    }
+  } catch {
+    // Invalid/expired code, malformed body, whatever — Telegram still just needs a 200.
+  }
+  return json(200, { ok: true });
+}
+
 const GOOGLE_ENABLED = !!process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
@@ -205,6 +270,7 @@ const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/youtube.readonly',
   'https://www.googleapis.com/auth/youtube.upload',
   'https://www.googleapis.com/auth/yt-analytics.readonly',
+  'https://www.googleapis.com/auth/calendar.readonly',
 ].join(' ');
 
 function googleRedirectUri(event) {
@@ -327,6 +393,9 @@ async function handleIdleCheck() {
   }
 }
 
+// Fans out to every channel the user actually has set up — web push and/or
+// Telegram. A caller (scheduled tasks, background chat tasks) just calls
+// this once; it doesn't need to know which channels exist.
 async function sendPush(userId, title, body) {
   const { data } = await supabase.from('push_subscriptions').select('endpoint, keys_json').eq('user_id', userId);
   const payloadStr = JSON.stringify({ title, body });
@@ -341,6 +410,17 @@ async function sendPush(userId, title, body) {
       }
     }),
   );
+
+  if (TELEGRAM_ENABLED) {
+    const { data: tg } = await supabase.from('connectors').select('access_token').eq('user_id', userId).eq('provider', 'telegram').maybeSingle();
+    if (tg) {
+      try {
+        await telegramSend(tg.access_token, `${title}\n\n${body}`);
+      } catch {
+        // best-effort, same as web push above
+      }
+    }
+  }
 }
 
 // Same tick as the idle-check (every 5 min) — due-task detection only needs
@@ -400,6 +480,83 @@ async function handleScheduledTasks() {
   return { due: due.length, results };
 }
 
+// Self-contained NSE price/RSI check — deliberately duplicates the handful
+// of lines of indicator math from server/src/llm/marketDataClient.js rather
+// than importing across the Lambda/EC2 boundary (they're separately
+// deployed services with no shared build step). Keep both in sync if the
+// RSI method changes — see [[kully-scheduled-trading-video-agents]] memory
+// for why Wilder's smoothing specifically matters here.
+function wilderRsi14(closes) {
+  const period = 14;
+  if (closes.length < period + 1) return null;
+  let avgGain = 0;
+  let avgLoss = 0;
+  for (let i = 1; i <= period; i++) {
+    const change = closes[i] - closes[i - 1];
+    if (change >= 0) avgGain += change;
+    else avgLoss -= change;
+  }
+  avgGain /= period;
+  avgLoss /= period;
+  for (let i = period + 1; i < closes.length; i++) {
+    const change = closes[i] - closes[i - 1];
+    avgGain = (avgGain * (period - 1) + (change >= 0 ? change : 0)) / period;
+    avgLoss = (avgLoss * (period - 1) + (change < 0 ? -change : 0)) / period;
+  }
+  if (avgLoss === 0) return 100;
+  return 100 - 100 / (1 + avgGain / avgLoss);
+}
+
+async function fetchIndicatorValue(symbol, indicator) {
+  const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}.NS?range=1y&interval=1d`, {
+    headers: { 'User-Agent': 'Mozilla/5.0' },
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  const result = data.chart?.result?.[0];
+  if (!result) return null;
+
+  if (indicator === 'price') return result.meta.regularMarketPrice;
+  const closes = (result.indicators.quote[0].close ?? []).filter((v) => v != null);
+  return wilderRsi14(closes);
+}
+
+// Checked on the same 5-minute tick as everything else — pure market-data
+// lookup, no Groq/EC2 involved at all, so this works even while the box is
+// stopped and costs nothing beyond the free Yahoo Finance call.
+async function handleMarketAlerts() {
+  const { data: alerts, error } = await supabase
+    .from('market_alerts')
+    .select('id, user_id, symbol, indicator, comparator, threshold')
+    .eq('enabled', true)
+    .is('deleted_at', null);
+  if (error || !alerts?.length) return { checked: 0 };
+
+  let triggered = 0;
+  for (const alert of alerts) {
+    try {
+      const value = await fetchIndicatorValue(alert.symbol, alert.indicator);
+      if (value == null) continue;
+
+      const crossed = alert.comparator === 'above' ? value > alert.threshold : value < alert.threshold;
+      if (!crossed) continue;
+
+      await sendPush(
+        alert.user_id,
+        `Kully — ${alert.symbol} alert`,
+        `${alert.symbol} ${alert.indicator} is now ${Math.round(value * 100) / 100}, ${alert.comparator} your threshold of ${alert.threshold}.`,
+      );
+      // One-shot, like a one-time scheduled task — avoids repeat-notification
+      // spam every 5 minutes while the condition stays true.
+      await supabase.from('market_alerts').update({ enabled: false, triggered_at: new Date().toISOString() }).eq('id', alert.id);
+      triggered += 1;
+    } catch {
+      // best-effort — a single bad symbol/network blip shouldn't block the rest
+    }
+  }
+  return { checked: alerts.length, triggered };
+}
+
 export const handler = async (event) => {
   if (!event.requestContext?.http) {
     // Sequential, not concurrent: dispatching a task doesn't touch the
@@ -407,8 +564,9 @@ export const handler = async (event) => {
     // must run AFTER any due task has fully finished, never alongside it —
     // otherwise it could stop the box mid-task.
     const tasks = await handleScheduledTasks();
+    const alerts = await handleMarketAlerts();
     const idle = await handleIdleCheck();
-    return { idle, tasks };
+    return { idle, tasks, alerts };
   }
 
   const { method, path: reqPath } = event.requestContext.http;
@@ -456,6 +614,12 @@ export const handler = async (event) => {
       return json(200, { ok: true });
     }
 
+    if (TELEGRAM_ENABLED && method === 'GET' && reqPath === '/connectors/telegram/start') {
+      return handleTelegramStart(event);
+    }
+    if (TELEGRAM_ENABLED && method === 'POST' && reqPath === '/telegram/webhook') {
+      return handleTelegramWebhook(headers, body);
+    }
     if (GOOGLE_ENABLED && method === 'GET' && reqPath === '/connectors/google/start') {
       return handleGoogleStart(event);
     }

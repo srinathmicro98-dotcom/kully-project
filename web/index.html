@@ -133,6 +133,25 @@
           <button type="button" id="addTaskBtn">Schedule</button>
         </div>
       </div>
+      <h3 class="panel-section-title">Market alerts <span class="dim">— checked every ~5 min, fires once</span></h3>
+      <div id="marketAlertsList"></div>
+      <div class="add-fact-form">
+        <div class="row">
+          <input type="text" id="newAlertSymbol" placeholder="Symbol e.g. RELIANCE" style="flex:1" />
+        </div>
+        <div class="row">
+          <select id="newAlertIndicator">
+            <option value="price">Price</option>
+            <option value="rsi14">RSI14</option>
+          </select>
+          <select id="newAlertComparator">
+            <option value="above">goes above</option>
+            <option value="below">drops below</option>
+          </select>
+          <input type="number" id="newAlertThreshold" placeholder="Threshold" style="width:100px" />
+          <button type="button" id="addAlertBtn">Set alert</button>
+        </div>
+      </div>
       <h3 class="panel-section-title">Recently deleted <span class="dim">— restorable for 30 days</span></h3>
       <div id="trashList"></div>
       <h3 class="panel-section-title">Usage <span class="dim">— last 30 days, estimated</span></h3>

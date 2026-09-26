@@ -40,7 +40,7 @@ async function pruneOldBackups() {
 // Permanently removes anything soft-deleted more than RETENTION_DAYS ago —
 // only ever called AFTER this run's backup is safely in S3, so a row is
 // never gone from both places at once.
-const SOFT_DELETE_TABLES = ['facts', 'scheduled_tasks', 'skills'];
+const SOFT_DELETE_TABLES = ['facts', 'scheduled_tasks', 'skills', 'market_alerts'];
 async function purgeSoftDeleted(client) {
   const purged = {};
   for (const table of SOFT_DELETE_TABLES) {

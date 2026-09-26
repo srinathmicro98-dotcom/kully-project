@@ -123,6 +123,21 @@ create table scheduled_tasks (
 create index on scheduled_tasks (enabled, run_at);
 create index on scheduled_tasks (deleted_at);
 
+create table market_alerts (
+  id uuid primary key default gen_random_uuid(),
+  user_id text not null,
+  project text not null default 'default',
+  symbol text not null,
+  indicator text not null check (indicator in ('price', 'rsi14')),
+  comparator text not null check (comparator in ('above', 'below')),
+  threshold numeric not null,
+  enabled boolean not null default true,
+  triggered_at timestamptz,
+  created_at timestamptz not null default now(),
+  deleted_at timestamptz
+);
+create index on market_alerts (enabled, deleted_at);
+
 create table connectors (
   user_id text not null,
   provider text not null,

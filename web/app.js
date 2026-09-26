@@ -47,6 +47,12 @@ const responseStyleToggle = document.getElementById('responseStyleToggle');
 const usageSummary = document.getElementById('usageSummary');
 const scheduledTasksList = document.getElementById('scheduledTasksList');
 const trashList = document.getElementById('trashList');
+const marketAlertsList = document.getElementById('marketAlertsList');
+const newAlertSymbol = document.getElementById('newAlertSymbol');
+const newAlertIndicator = document.getElementById('newAlertIndicator');
+const newAlertComparator = document.getElementById('newAlertComparator');
+const newAlertThreshold = document.getElementById('newAlertThreshold');
+const addAlertBtn = document.getElementById('addAlertBtn');
 const newTaskPrompt = document.getElementById('newTaskPrompt');
 const newTaskType = document.getElementById('newTaskType');
 const newTaskTime = document.getElementById('newTaskTime');
@@ -563,7 +569,83 @@ skillsBtn.addEventListener('click', () => {
   loadResponseStyle();
   loadUsage();
   loadScheduledTasks();
+  loadMarketAlerts();
   loadTrash();
+});
+
+// ---- Market alerts ----
+
+async function loadMarketAlerts() {
+  marketAlertsList.textContent = 'Loading…';
+  try {
+    const res = await controlFetch(`${CHAT_URL}/market-alerts?user_id=${encodeURIComponent(state.userId)}`);
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const alerts = await res.json();
+
+    marketAlertsList.innerHTML = '';
+    if (!alerts.length) {
+      marketAlertsList.textContent = 'No market alerts set.';
+      return;
+    }
+    for (const a of alerts) {
+      const row = document.createElement('div');
+      row.className = 'toggle-row';
+
+      const info = document.createElement('span');
+      info.className = 'tool-name';
+      const status = a.triggered_at ? ' (triggered)' : a.enabled ? '' : ' (off)';
+      info.textContent = `${a.symbol} ${a.indicator} ${a.comparator} ${a.threshold}${status}`;
+      row.appendChild(info);
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.textContent = '✕';
+      deleteBtn.className = 'ghost-btn';
+      deleteBtn.addEventListener('click', async () => {
+        if (!confirm(`Delete alert for ${a.symbol}?`)) return;
+        try {
+          const delRes = await controlFetch(`${CHAT_URL}/market-alerts/${a.id}?user_id=${encodeURIComponent(state.userId)}`, { method: 'DELETE' });
+          if (!delRes.ok) throw new Error(`status ${delRes.status}`);
+          loadMarketAlerts();
+        } catch (err) {
+          alert(`Could not delete: ${err.message}`);
+        }
+      });
+      row.appendChild(deleteBtn);
+
+      marketAlertsList.appendChild(row);
+    }
+  } catch (err) {
+    marketAlertsList.textContent = `Could not load market alerts: ${err.message}. Is your server connected?`;
+  }
+}
+
+addAlertBtn.addEventListener('click', async () => {
+  const symbol = newAlertSymbol.value.trim();
+  const threshold = Number(newAlertThreshold.value);
+  if (!symbol) return alert('Enter a symbol.');
+  if (!newAlertThreshold.value || Number.isNaN(threshold)) return alert('Enter a numeric threshold.');
+
+  try {
+    const res = await controlFetch(`${CHAT_URL}/market-alerts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: state.userId,
+        project: state.project,
+        symbol,
+        indicator: newAlertIndicator.value,
+        comparator: newAlertComparator.value,
+        threshold,
+      }),
+    });
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    newAlertSymbol.value = '';
+    newAlertThreshold.value = '';
+    loadMarketAlerts();
+  } catch (err) {
+    alert(`Could not set alert: ${err.message}`);
+  }
 });
 
 // ---- Recently deleted (soft-delete restore) ----
@@ -1109,45 +1191,50 @@ addTaskBtn.addEventListener('click', async () => {
 
 // ---- Connectors ----
 
+function renderConnectorRow(displayName, providerKey, connectors) {
+  const connected = connectors.find((c) => c.provider === providerKey);
+  const row = document.createElement('div');
+  row.className = 'connector-row';
+  const label = document.createElement('span');
+  label.textContent = connected ? `${displayName} — connected` : `${displayName} — not connected`;
+  row.appendChild(label);
+
+  if (connected) {
+    const disconnectBtn2 = document.createElement('button');
+    disconnectBtn2.type = 'button';
+    disconnectBtn2.textContent = 'Disconnect';
+    disconnectBtn2.addEventListener('click', async () => {
+      try {
+        const res2 = await controlFetch(`/connectors/${providerKey}`, { method: 'DELETE' });
+        if (!res2.ok) throw new Error(`status ${res2.status}`);
+        loadConnectors();
+      } catch (err) {
+        alert(`Could not disconnect: ${err.message}`);
+      }
+    });
+    row.appendChild(disconnectBtn2);
+  } else {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = 'Connect';
+    btn.addEventListener('click', () => {
+      window.location.href = `/connectors/${providerKey}/start?token=${encodeURIComponent(state.token)}`;
+    });
+    row.appendChild(btn);
+  }
+  return row;
+}
+
 async function loadConnectors() {
   connectorsList.textContent = 'Loading…';
   try {
     const res = await controlFetch('/connectors');
     if (!res.ok) throw new Error(`status ${res.status}`);
     const connectors = await res.json();
-    const google = connectors.find((c) => c.provider === 'google');
 
     connectorsList.innerHTML = '';
-    const row = document.createElement('div');
-    row.className = 'connector-row';
-    const label = document.createElement('span');
-    label.textContent = google ? `Google — connected` : 'Google — not connected';
-    row.appendChild(label);
-
-    if (google) {
-      const disconnectBtn2 = document.createElement('button');
-      disconnectBtn2.type = 'button';
-      disconnectBtn2.textContent = 'Disconnect';
-      disconnectBtn2.addEventListener('click', async () => {
-        try {
-          const res2 = await controlFetch('/connectors/google', { method: 'DELETE' });
-          if (!res2.ok) throw new Error(`status ${res2.status}`);
-          loadConnectors();
-        } catch (err) {
-          alert(`Could not disconnect: ${err.message}`);
-        }
-      });
-      row.appendChild(disconnectBtn2);
-    } else {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.textContent = 'Connect';
-      btn.addEventListener('click', () => {
-        window.location.href = `/connectors/google/start?token=${encodeURIComponent(state.token)}`;
-      });
-      row.appendChild(btn);
-    }
-    connectorsList.appendChild(row);
+    connectorsList.appendChild(renderConnectorRow('Google', 'google', connectors));
+    connectorsList.appendChild(renderConnectorRow('Telegram', 'telegram', connectors));
   } catch (err) {
     connectorsList.textContent = `Could not load connectors: ${err.message}. Is your server connected?`;
   }

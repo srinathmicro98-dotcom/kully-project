@@ -3,6 +3,7 @@ import { runToolLoop } from './toolLoop.js';
 import { chatCompletion, MODELS } from '../../llm/groqClient.js';
 import { getSystemPrompt } from '../../memory/agentConfigStore.js';
 import { getHistoricalWithIndicators } from '../../llm/marketDataClient.js';
+import { createAlert } from '../../memory/marketAlertStore.js';
 import { CREATE_ARTIFACT_TOOL, handleCreateArtifactTool } from './sharedTools.js';
 
 export const name = 'trading';
@@ -20,7 +21,11 @@ range, the technical rationale (which indicators/levels support it), and a line 
 not financial advice and they must place any order themselves through their own broker. Never create an \
 artifact implying an order was actually placed. \
 If asked to "buy X" or "sell X" directly, explain plainly that you can't execute trades and offer to \
-prepare a draft order artifact instead, or just give the analysis.`;
+prepare a draft order artifact instead, or just give the analysis. \
+Use create_price_alert when the user wants to be notified about a future condition (e.g. "alert me if \
+RELIANCE RSI drops below 30", "tell me when TCS goes above 2200") — this is checked automatically every \
+few minutes even while they're not chatting with you, and fires once (they'd need to re-create it after). \
+It does not execute anything, only notifies.`;
 
 const GET_MARKET_DATA_TOOL = {
   type: 'function',
@@ -38,12 +43,36 @@ const GET_MARKET_DATA_TOOL = {
   },
 };
 
-const TOOLS = [GET_MARKET_DATA_TOOL, CREATE_ARTIFACT_TOOL];
+const CREATE_PRICE_ALERT_TOOL = {
+  type: 'function',
+  function: {
+    name: 'create_price_alert',
+    description: 'Set up a one-time notification for when a stock\'s price or RSI14 crosses a threshold — checked automatically, not requiring the user to be chatting.',
+    parameters: {
+      type: 'object',
+      properties: {
+        symbol: { type: 'string', description: 'Plain NSE ticker, e.g. "RELIANCE".' },
+        indicator: { type: 'string', enum: ['price', 'rsi14'] },
+        comparator: { type: 'string', enum: ['above', 'below'] },
+        threshold: { type: 'number' },
+      },
+      required: ['symbol', 'indicator', 'comparator', 'threshold'],
+    },
+  },
+};
+
+const TOOLS = [GET_MARKET_DATA_TOOL, CREATE_ARTIFACT_TOOL, CREATE_PRICE_ALERT_TOOL];
 
 async function dispatch(call, ctx) {
   const args = JSON.parse(call.function.arguments);
   if (call.function.name === 'get_market_data') return getHistoricalWithIndicators(args.symbol, args.days || 90);
   if (call.function.name === 'create_artifact') return handleCreateArtifactTool(args, ctx);
+  if (call.function.name === 'create_price_alert') {
+    return createAlert({
+      userId: ctx.userId, project: ctx.project,
+      symbol: args.symbol, indicator: args.indicator, comparator: args.comparator, threshold: args.threshold,
+    });
+  }
   return { error: `unknown tool: ${call.function.name}` };
 }
 

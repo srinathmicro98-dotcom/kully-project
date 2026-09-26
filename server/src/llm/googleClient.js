@@ -198,6 +198,25 @@ export async function youtubeUploadVideo() {
   };
 }
 
+export async function calendarListEvents(userId, days = 7) {
+  const timeMin = new Date().toISOString();
+  const timeMax = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+  const res = await googleFetch(
+    userId,
+    `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}` +
+      `&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime&maxResults=25`,
+  );
+  const data = await res.json();
+  return {
+    events: (data.items ?? []).map((e) => ({
+      summary: e.summary,
+      start: e.start?.dateTime || e.start?.date,
+      end: e.end?.dateTime || e.end?.date,
+      location: e.location,
+    })),
+  };
+}
+
 export async function driveWriteFile(userId, { fileId, name, content, mimeType = 'text/plain' }) {
   if (fileId) {
     await googleFetch(userId, `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {

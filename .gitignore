@@ -10,3 +10,4 @@ lambda/control-plane/public/
 lambda/control-plane/function.zip
 lambda/code-runner-node/function.zip
 lambda/code-runner-python/function.zip
+lambda/db-backup/function.zip
