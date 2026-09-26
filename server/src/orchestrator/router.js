@@ -7,7 +7,11 @@ running code, reading/writing a file, executing a shell command, or invoking a n
 dev agent has those tools). If the message mentions a filename, a function, a stack trace, "run"/"test"/ \
 "debug"/"refactor" something, or references a skill by name, that's dev, even if it's also asking for an \
 explanation.
-- search: needs current/live information from the EXTERNAL web (news, prices, "latest", real-time facts). \
+- trading: stocks, NSE/BSE tickers, charts, technical indicators, "buy"/"sell" a stock, market analysis — \
+even though this involves current prices, it's its own label, not search.
+- video: YouTube content — scripts, thumbnails, channel analytics/views, upload, growth/trend research for a channel.
+- search: needs current/live information from the EXTERNAL web (news, "latest", real-time facts) that ISN'T \
+market/trading data or YouTube content (those have their own labels above). \
 NOT for recalling the user's own past notes/decisions/projects — "search across my projects" or "did I \
 decide this before" is about the user's own remembered facts, not the live web, so that's general, not search.
 - general: everything else (conversation, planning, brainstorming, advice, recalling the user's own past \

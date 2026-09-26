@@ -133,6 +133,71 @@ export async function driveReadFile(userId, fileId) {
   return { name: meta.name, mimeType: meta.mimeType, content: truncate(await res.text()) };
 }
 
+export async function youtubeSearchTrending(userId, query, maxResults = 10) {
+  const res = await googleFetch(
+    userId,
+    `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&order=viewCount&maxResults=${maxResults}&q=${encodeURIComponent(query)}`,
+  );
+  const data = await res.json();
+  return {
+    results: (data.items ?? []).map((item) => ({
+      videoId: item.id.videoId,
+      title: item.snippet.title,
+      channel: item.snippet.channelTitle,
+      publishedAt: item.snippet.publishedAt,
+    })),
+  };
+}
+
+export async function youtubeChannelStats(userId) {
+  const res = await googleFetch(
+    userId,
+    'https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&mine=true',
+  );
+  const data = await res.json();
+  const channel = data.items?.[0];
+  if (!channel) return { error: 'no YouTube channel found for this Google account' };
+  return {
+    channelId: channel.id,
+    title: channel.snippet.title,
+    subscriberCount: channel.statistics.subscriberCount,
+    viewCount: channel.statistics.viewCount,
+    videoCount: channel.statistics.videoCount,
+  };
+}
+
+// Recent per-day channel performance — real numbers from the user's own
+// channel via the YouTube Analytics API (separate API surface/scope from
+// the Data API above).
+export async function youtubeAnalytics(userId, days = 28) {
+  const end = new Date();
+  const start = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const fmt = (d) => d.toISOString().slice(0, 10);
+  const res = await googleFetch(
+    userId,
+    `https://youtubeanalytics.googleapis.com/v2/reports?ids=channel==MINE&startDate=${fmt(start)}&endDate=${fmt(end)}` +
+      '&metrics=views,estimatedMinutesWatched,subscribersGained&dimensions=day&sort=day',
+  );
+  const data = await res.json();
+  return {
+    columns: (data.columnHeaders ?? []).map((c) => c.name),
+    rows: data.rows ?? [],
+  };
+}
+
+// Real upload requires an actual video file, which needs avatar-video
+// generation (not built — every viable provider is paid, deferred until
+// the user picks and pays for one). Left as an explicit, honest stub rather
+// than half-implementing YouTube's resumable upload protocol for a feature
+// nothing can produce input for yet.
+export async function youtubeUploadVideo() {
+  return {
+    error: 'Video upload isn\'t available yet — it needs an actual video file, which requires an avatar-video ' +
+      'generation provider (e.g. HeyGen/Synthesia/D-ID) that hasn\'t been configured. The script/plan can still ' +
+      'be prepared now; wire up a provider to enable the actual upload.',
+  };
+}
+
 export async function driveWriteFile(userId, { fileId, name, content, mimeType = 'text/plain' }) {
   if (fileId) {
     await googleFetch(userId, `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
