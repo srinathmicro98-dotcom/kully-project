@@ -351,6 +351,7 @@ async function handleScheduledTasks() {
     .from('scheduled_tasks')
     .select('id, user_id, project, prompt, schedule_type, time_of_day')
     .eq('enabled', true)
+    .is('deleted_at', null)
     .lte('run_at', new Date().toISOString());
   if (error || !due?.length) return { due: due?.length ?? 0 };
 

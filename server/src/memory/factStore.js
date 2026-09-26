@@ -61,6 +61,7 @@ export async function listFactsForProject({ userId, project, limit = 20 }) {
     .select('id, content, fact_type, created_at')
     .eq('user_id', userId)
     .eq('project', project)
+    .is('deleted_at', null)
     .order('created_at', { ascending: false })
     .limit(limit);
   if (error) throw error;
@@ -99,7 +100,26 @@ export async function updateFact({ id, userId, content, factType }) {
   if (error) throw error;
 }
 
+// Soft delete — marks the row rather than removing it, so it's recoverable
+// (see listTrash/restoreFromTrash) until the daily backup Lambda purges
+// anything still soft-deleted after 30 days.
 export async function deleteFact({ id, userId }) {
-  const { error } = await supabase.from('facts').delete().eq('id', id).eq('user_id', userId);
+  const { error } = await supabase.from('facts').update({ deleted_at: new Date().toISOString() }).eq('id', id).eq('user_id', userId);
   if (error) throw error;
+}
+
+export async function restoreFact({ id, userId }) {
+  const { error } = await supabase.from('facts').update({ deleted_at: null }).eq('id', id).eq('user_id', userId);
+  if (error) throw error;
+}
+
+export async function listDeletedFacts(userId) {
+  const { data, error } = await supabase
+    .from('facts')
+    .select('id, content, fact_type, project, deleted_at')
+    .eq('user_id', userId)
+    .not('deleted_at', 'is', null)
+    .order('deleted_at', { ascending: false });
+  if (error) throw error;
+  return data;
 }

@@ -46,6 +46,7 @@ const connectorsList = document.getElementById('connectorsList');
 const responseStyleToggle = document.getElementById('responseStyleToggle');
 const usageSummary = document.getElementById('usageSummary');
 const scheduledTasksList = document.getElementById('scheduledTasksList');
+const trashList = document.getElementById('trashList');
 const newTaskPrompt = document.getElementById('newTaskPrompt');
 const newTaskType = document.getElementById('newTaskType');
 const newTaskTime = document.getElementById('newTaskTime');
@@ -562,7 +563,57 @@ skillsBtn.addEventListener('click', () => {
   loadResponseStyle();
   loadUsage();
   loadScheduledTasks();
+  loadTrash();
 });
+
+// ---- Recently deleted (soft-delete restore) ----
+
+async function loadTrash() {
+  trashList.textContent = 'Loading…';
+  try {
+    const res = await controlFetch(`${CHAT_URL}/trash?user_id=${encodeURIComponent(state.userId)}`);
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const items = await res.json();
+
+    trashList.innerHTML = '';
+    if (!items.length) {
+      trashList.textContent = 'Nothing deleted recently.';
+      return;
+    }
+    for (const item of items) {
+      const row = document.createElement('div');
+      row.className = 'toggle-row';
+
+      const info = document.createElement('span');
+      info.className = 'tool-name';
+      info.textContent = `[${item.type}] ${item.label.slice(0, 60)}${item.label.length > 60 ? '…' : ''}`;
+      row.appendChild(info);
+
+      const restoreBtn = document.createElement('button');
+      restoreBtn.type = 'button';
+      restoreBtn.textContent = 'Restore';
+      restoreBtn.className = 'ghost-btn';
+      restoreBtn.addEventListener('click', async () => {
+        try {
+          const res2 = await controlFetch(`${CHAT_URL}/trash/restore`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: state.userId, type: item.type, id: item.id }),
+          });
+          if (!res2.ok) throw new Error(`status ${res2.status}`);
+          loadTrash();
+        } catch (err) {
+          alert(`Could not restore: ${err.message}`);
+        }
+      });
+      row.appendChild(restoreBtn);
+
+      trashList.appendChild(row);
+    }
+  } catch (err) {
+    trashList.textContent = `Could not load recently deleted items: ${err.message}. Is your server connected?`;
+  }
+}
 
 // ---- Skills library (invokable skills, not just agent prompts) ----
 
@@ -1011,6 +1062,7 @@ async function loadScheduledTasks() {
       deleteBtn.textContent = '✕';
       deleteBtn.className = 'ghost-btn';
       deleteBtn.addEventListener('click', async () => {
+        if (!confirm(`Delete this scheduled check-in?\n\n"${t.prompt.slice(0, 80)}"`)) return;
         try {
           const delRes = await controlFetch(`${CHAT_URL}/scheduled-tasks/${t.id}?user_id=${encodeURIComponent(state.userId)}`, { method: 'DELETE' });
           if (!delRes.ok) throw new Error(`status ${delRes.status}`);

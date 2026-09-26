@@ -44,6 +44,9 @@ kully-cofounder.duckdns.org {
 	handle /scheduled-tasks* {
 		reverse_proxy 127.0.0.1:3000
 	}
+	handle /trash* {
+		reverse_proxy 127.0.0.1:3000
+	}
 	handle {
 		respond "Kully chat API — see the control-plane app for the UI" 404
 	}

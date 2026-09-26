@@ -31,6 +31,7 @@ export async function listTasks(userId) {
     .from('scheduled_tasks')
     .select('id, project, prompt, schedule_type, run_at, time_of_day, enabled, last_run_at, created_at')
     .eq('user_id', userId)
+    .is('deleted_at', null)
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data;
@@ -41,7 +42,29 @@ export async function setTaskEnabled({ id, userId, enabled }) {
   if (error) throw error;
 }
 
+// Soft delete — see factStore.js's deleteFact for the rationale/lifecycle.
+// Also disables the task (defense in depth) so a soft-deleted-but-somehow-
+// still-enabled row can never be picked up by the Lambda's due-task check.
 export async function deleteTask({ id, userId }) {
-  const { error } = await supabase.from('scheduled_tasks').delete().eq('id', id).eq('user_id', userId);
+  const { error } = await supabase
+    .from('scheduled_tasks')
+    .update({ deleted_at: new Date().toISOString(), enabled: false })
+    .eq('id', id).eq('user_id', userId);
   if (error) throw error;
+}
+
+export async function restoreTask({ id, userId }) {
+  const { error } = await supabase.from('scheduled_tasks').update({ deleted_at: null }).eq('id', id).eq('user_id', userId);
+  if (error) throw error;
+}
+
+export async function listDeletedTasks(userId) {
+  const { data, error } = await supabase
+    .from('scheduled_tasks')
+    .select('id, prompt, schedule_type, deleted_at')
+    .eq('user_id', userId)
+    .not('deleted_at', 'is', null)
+    .order('deleted_at', { ascending: false });
+  if (error) throw error;
+  return data;
 }

@@ -32,10 +32,12 @@ create table facts (
   content text not null,
   embedding vector(1024),
   source_message_id uuid references messages(id) on delete set null,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  deleted_at timestamptz
 );
 create index facts_embedding_idx on facts using hnsw (embedding vector_cosine_ops);
 create index on facts (user_id);
+create index on facts (deleted_at);
 
 create table routing_logs (
   id uuid primary key default gen_random_uuid(),
@@ -64,8 +66,10 @@ create table skills (
   name text primary key,
   description text not null,
   body text not null,
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz
 );
+create index on skills (deleted_at);
 
 create table tool_config (
   tool_name text primary key,
@@ -113,9 +117,11 @@ create table scheduled_tasks (
   time_of_day text, -- 'HH:MM' UTC, only meaningful for schedule_type='daily'
   enabled boolean not null default true,
   last_run_at timestamptz,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  deleted_at timestamptz
 );
 create index on scheduled_tasks (enabled, run_at);
+create index on scheduled_tasks (deleted_at);
 
 create table connectors (
   user_id text not null,
@@ -137,7 +143,7 @@ create or replace function match_facts(
 language sql stable as $$
   select id, content, project, fact_type, 1 - (embedding <=> query_embedding) as similarity
   from facts
-  where user_id = match_user_id and embedding is not null
+  where user_id = match_user_id and embedding is not null and deleted_at is null
     and (match_project is null or project = match_project or project is null)
   order by
     case when match_project is not null and project = match_project then 0 else 1 end,
@@ -155,7 +161,7 @@ create or replace function match_facts_global(
 language sql stable as $$
   select id, content, project, fact_type, 1 - (embedding <=> query_embedding) as similarity
   from facts
-  where user_id = match_user_id and embedding is not null
+  where user_id = match_user_id and embedding is not null and deleted_at is null
   order by embedding <=> query_embedding
   limit match_count;
 $$;

@@ -37,6 +37,21 @@ async function pruneOldBackups() {
   return stale.length;
 }
 
+// Permanently removes anything soft-deleted more than RETENTION_DAYS ago —
+// only ever called AFTER this run's backup is safely in S3, so a row is
+// never gone from both places at once.
+const SOFT_DELETE_TABLES = ['facts', 'scheduled_tasks', 'skills'];
+async function purgeSoftDeleted(client) {
+  const purged = {};
+  for (const table of SOFT_DELETE_TABLES) {
+    const { rowCount } = await client.query(
+      `delete from "${table}" where deleted_at is not null and deleted_at < now() - interval '${RETENTION_DAYS} days'`,
+    );
+    purged[table] = rowCount;
+  }
+  return purged;
+}
+
 export const handler = async () => {
   // The direct db.<ref>.supabase.co host is IPv6-only, and Lambda's default
   // (non-VPC) networking is IPv4-only — connect through Supabase's Supavisor
@@ -53,29 +68,34 @@ export const handler = async () => {
   });
 
   await client.connect();
-  let result;
   try {
-    result = await dumpAllTables(client);
+    const result = await dumpAllTables(client);
+
+    const timestamp = new Date().toISOString();
+    const payload = JSON.stringify({ timestamp, tables: result.dump });
+    const gzipped = zlib.gzipSync(payload);
+
+    const key = `backups/${timestamp.replace(/:/g, '-')}/data.json.gz`;
+    await s3.send(new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: gzipped, ContentType: 'application/gzip' }));
+
+    const manifestKey = `backups/${timestamp.replace(/:/g, '-')}/manifest.json`;
+    await s3.send(new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: manifestKey,
+      Body: JSON.stringify({ timestamp, rowCounts: result.counts, dataKey: key }, null, 2),
+      ContentType: 'application/json',
+    }));
+
+    // Only permanently purge soft-deleted rows once this run's backup is
+    // confirmed safely in S3 — never the other order.
+    const purged = await purgeSoftDeleted(client);
+    const prunedBackups = await pruneOldBackups();
+
+    return {
+      ok: true, timestamp, tables: Object.keys(result.counts).length,
+      rowCounts: result.counts, purgedSoftDeleted: purged, prunedOldBackups: prunedBackups,
+    };
   } finally {
     await client.end();
   }
-
-  const timestamp = new Date().toISOString();
-  const payload = JSON.stringify({ timestamp, tables: result.dump });
-  const gzipped = zlib.gzipSync(payload);
-
-  const key = `backups/${timestamp.replace(/:/g, '-')}/data.json.gz`;
-  await s3.send(new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: gzipped, ContentType: 'application/gzip' }));
-
-  const manifestKey = `backups/${timestamp.replace(/:/g, '-')}/manifest.json`;
-  await s3.send(new PutObjectCommand({
-    Bucket: BUCKET,
-    Key: manifestKey,
-    Body: JSON.stringify({ timestamp, rowCounts: result.counts, dataKey: key }, null, 2),
-    ContentType: 'application/json',
-  }));
-
-  const pruned = await pruneOldBackups();
-
-  return { ok: true, timestamp, tables: Object.keys(result.counts).length, rowCounts: result.counts, prunedOldBackups: pruned };
 };
