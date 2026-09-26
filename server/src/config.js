@@ -42,4 +42,9 @@ export const config = {
   // expired access token — the OAuth exchange itself happens in the Lambda.
   googleClientId: process.env.GOOGLE_CLIENT_ID || null,
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || null,
+  // The control-plane Lambda's public Function URL — this is the same
+  // front-door address the web client itself talks to (not a secret), so a
+  // hardcoded default is fine and avoids requiring a matching .env edit on
+  // the EC2 box just to enable background-task push notifications.
+  controlPlaneUrl: process.env.CONTROL_PLANE_URL || 'https://pdccvynvrn4dltlzbtj6y2ysga0amggp.lambda-url.ap-south-1.on.aws',
 };

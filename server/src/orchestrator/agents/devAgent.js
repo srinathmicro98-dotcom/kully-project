@@ -429,7 +429,7 @@ export async function handle(ctx) {
     messages,
     tools: activeTools,
     dispatch: (call) => dispatch(call, ctx, enabledNames),
-    maxIterations: MAX_TOOL_ITERATIONS,
+    maxIterations: ctx.maxIterations || MAX_TOOL_ITERATIONS,
     userId: ctx.userId,
   });
   return { reply };

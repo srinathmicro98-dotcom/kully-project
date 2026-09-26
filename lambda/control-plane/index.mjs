@@ -434,6 +434,23 @@ export const handler = async (event) => {
     if (method === 'POST' && reqPath === '/push/notify-ready') {
       return requireAuth(headers) ? await handleNotifyReady(body) : json(401, { error: 'unauthorized' });
     }
+    if (method === 'POST' && reqPath === '/internal/push') {
+      // Called by the EC2 app (background-task completion), not the browser —
+      // same shared secret used everywhere else on this internal channel.
+      if (headers['x-internal-secret'] !== process.env.INTERNAL_API_SECRET) return json(401, { error: 'unauthorized' });
+      let payload;
+      try {
+        payload = JSON.parse(body || '{}');
+      } catch {
+        return json(400, { error: 'invalid body' });
+      }
+      const { user_id: userId, title, body: pushBody } = payload;
+      if (typeof userId !== 'string' || typeof title !== 'string' || typeof pushBody !== 'string') {
+        return json(400, { error: 'user_id, title, and body are required' });
+      }
+      await sendPush(userId, title, pushBody);
+      return json(200, { ok: true });
+    }
 
     if (GOOGLE_ENABLED && method === 'GET' && reqPath === '/connectors/google/start') {
       return handleGoogleStart(event);

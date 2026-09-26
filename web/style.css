@@ -627,6 +627,10 @@ header button {
   color: #ff6b6b;
 }
 
+.icon-btn.active {
+  color: var(--accent);
+}
+
 #composer {
   display: flex;
   gap: 8px;

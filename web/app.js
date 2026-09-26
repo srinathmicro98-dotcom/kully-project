@@ -57,6 +57,7 @@ const micBtn = document.getElementById('micBtn');
 const pendingAttachmentEl = document.getElementById('pendingAttachment');
 const pendingAttachmentNameEl = document.getElementById('pendingAttachmentName');
 const removeAttachmentBtn = document.getElementById('removeAttachmentBtn');
+const backgroundModeBtn = document.getElementById('backgroundModeBtn');
 
 const state = {
   userId: 'default-user',
@@ -84,6 +85,7 @@ function setChatEnabled(enabled) {
   sendBtn.disabled = !enabled;
   attachBtn.disabled = !enabled;
   micBtn.disabled = !enabled;
+  backgroundModeBtn.disabled = !enabled;
   connectBtn.hidden = enabled;
   disconnectBtn.hidden = !enabled;
 }
@@ -313,6 +315,16 @@ fileInput.addEventListener('change', () => {
 
 removeAttachmentBtn.addEventListener('click', clearPendingAttachment);
 
+let backgroundMode = false;
+
+backgroundModeBtn.addEventListener('click', () => {
+  backgroundMode = !backgroundMode;
+  backgroundModeBtn.classList.toggle('active', backgroundMode);
+  backgroundModeBtn.title = backgroundMode
+    ? 'Background mode ON — next message runs as a long task, notifies you when done'
+    : 'Run next message as a background task (for big multi-step builds)';
+});
+
 composer.addEventListener('submit', async (e) => {
   e.preventDefault();
   const message = input.value.trim();
@@ -322,9 +334,14 @@ composer.addEventListener('submit', async (e) => {
   input.value = '';
   const attachment = pendingAttachment;
   clearPendingAttachment();
+  const useBackground = backgroundMode;
+  if (useBackground) {
+    backgroundMode = false;
+    backgroundModeBtn.classList.remove('active');
+  }
 
   try {
-    const res = await fetch(`${CHAT_URL}/chat`, {
+    const res = await fetch(`${CHAT_URL}/chat${useBackground ? '/background' : ''}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -343,7 +360,11 @@ composer.addEventListener('submit', async (e) => {
     if (!res.ok) throw new Error(`Server returned ${res.status}`);
     const data = await res.json();
     state.conversationId = data.conversation_id;
-    addMessage('assistant', data.reply, data.agent, data.images);
+    if (useBackground) {
+      addMessage('assistant', "Working on this in the background — I'll send a notification when it's done. You can keep using Kully in the meantime.", 'system');
+    } else {
+      addMessage('assistant', data.reply, data.agent, data.images);
+    }
   } catch (err) {
     addMessage('assistant', `Error: ${err.message}`, 'system');
   }

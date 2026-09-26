@@ -21,12 +21,11 @@ function extOf(filename) {
 }
 
 /**
- * The full chat pipeline shared by the real `/chat` route and internally-
- * triggered messages (e.g. a scheduled task's prompt) — routing, memory
- * recall/storage, attachments, everything. Both callers get a real
- * conversation in history, not a side-channel.
+ * Everything that's fast and must happen before the caller can respond:
+ * create/load the conversation, store the user's message, recall memory,
+ * stage attachments, and decide routing. Returns what `runChatTurn` needs.
  */
-export async function processChatMessage({ userId, project, conversationId: bodyConversationId, message, attachments = [] }) {
+export async function prepareChatTurn({ userId, project, conversationId: bodyConversationId, message, attachments = [] }) {
   const isNewConversation = !bodyConversationId;
   const conversationId = bodyConversationId || (await createConversation(userId, project));
 
@@ -101,8 +100,20 @@ export async function processChatMessage({ userId, project, conversationId: body
     generatedImages: [],
   };
 
+  return { conversationId, agentName, agentCtx, userId, project, message };
+}
+
+/**
+ * The slow part: actually invoke the agent (the tool loop that can take
+ * anywhere from a couple seconds to minutes), then store the reply and
+ * extract facts. Split out from prepareChatTurn so a caller (the background
+ * chat route) can respond to the client right after prepare and let this
+ * part keep running unawaited.
+ */
+export async function runChatTurn({ conversationId, agentName, agentCtx, userId, project, message }, { maxIterations } = {}) {
+  const ctx = maxIterations ? { ...agentCtx, maxIterations } : agentCtx;
   const agent = agents[agentName];
-  const { reply } = await agent.handle(agentCtx);
+  const { reply } = await agent.handle(ctx);
 
   const assistantMessageId = await insertMessage({
     conversationId,
@@ -119,5 +130,15 @@ export async function processChatMessage({ userId, project, conversationId: body
     sourceMessageId: assistantMessageId,
   });
 
-  return { conversationId, agent: agentName, reply, images: agentCtx.generatedImages };
+  return { conversationId, agent: agentName, reply, images: ctx.generatedImages };
+}
+
+/**
+ * The full pipeline in one call — used by the real `/chat` route and
+ * internally-triggered messages (e.g. a scheduled task's prompt) that are
+ * fine waiting for the whole thing synchronously.
+ */
+export async function processChatMessage(args) {
+  const prepared = await prepareChatTurn(args);
+  return runChatTurn(prepared);
 }
