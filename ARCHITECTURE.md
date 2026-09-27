@@ -83,6 +83,69 @@ first.
   below 30"), checked on the same 5-minute tick, entirely inside the Lambda,
   no Groq/EC2 involved. Fires once then auto-disables.
 
+## Reasoning tier: Claude Opus 5.5 via Bedrock
+
+As of 2026-09-27, the "smart" tier used by every specialist agent's tool loop
+(`server/src/orchestrator/agents/toolLoop.js`) is **Claude Opus 5.5 via Amazon
+Bedrock**, not Groq. `server/src/llm/bedrockClient.js` is a drop-in adapter —
+same `chatCompletion`/`chatCompletionWithTools` signatures as
+`groqClient.js` — that translates the app's OpenAI-shape messages/tools
+(Groq is OpenAI-compatible) to/from Anthropic's Messages API shape, using the
+Bedrock "Mantle" client (`@anthropic-ai/bedrock-sdk`), which mirrors the real
+Claude API 1:1.
+
+**Still on Groq, deliberately unchanged:** routing classification
+(`MODELS.fast`), vision turns (`MODELS.vision`), fact extraction, and
+conversation summarization — this swap is scoped to per-turn agent reasoning
+only, where quality actually matters and the cost is easiest to justify.
+
+**This is not free.** Unlike Groq, Bedrock has no free tier at all — it's
+billed per token through AWS Marketplace from the first request. This was a
+deliberate, explicit tradeoff (see chat history), not an oversight.
+
+**Model-specific gotcha:** Claude Opus 5.5 returns HTTP 400 on
+`temperature`/`top_p`/`top_k` — sampling params are removed on this model
+entirely. `bedrockClient.js` silently drops any `temperature` an agent still
+passes rather than forwarding it; `output_config.effort: "high"` is the
+actual quality/cost knob used instead (the model's own default, `medium`,
+would leave quality on the table for this specific swap).
+
+**Region gotcha:** neither `ap-south-1` nor `ap-south-2` (this project's AWS
+regions) support in-region or geo-restricted Bedrock routing for this model —
+only global cross-region inference does. `bedrockClient.js` uses model ID
+`global.anthropic.claude-opus-5-5`, meaning requests may be processed outside
+India/APAC. Not a concern for this single-user personal app, but worth
+knowing if that changes.
+
+**Required IAM (not yet applied — needs AWS credentials to finish):** the
+EC2 box has never needed AWS API access before this and has no instance
+profile. It needs one now, scoped to Bedrock invoke only:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
+    "Resource": "*"
+  }]
+}
+```
+
+`Resource: "*"` is a placeholder — tighten to the specific foundation-model/
+inference-profile ARN once a live call confirms the exact ARN Bedrock expects
+for the `global.` cross-region profile. No static AWS keys go in `.env` —
+auth is the instance profile via the standard AWS credential chain, same
+principle as every other credential-handling decision in this project.
+
+**Deployment status:** code is written, unit-tested (the OpenAI↔Anthropic
+message/tool format conversion), and committed — but **not yet deployed**.
+Every specialist agent's tool loop hard-depends on this working once
+deployed (no Groq fallback), so it should only ship to EC2 after the IAM
+role is attached and a live call is confirmed working — deploying first and
+debugging IAM against a broken production app would take the single-user
+app down for every agent at once.
+
 ## Connectors — status
 
 | Connector | State | What's needed |

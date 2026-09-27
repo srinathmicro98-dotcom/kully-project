@@ -42,6 +42,11 @@ export const config = {
   // expired access token — the OAuth exchange itself happens in the Lambda.
   googleClientId: process.env.GOOGLE_CLIENT_ID || null,
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || null,
+  // Region for the Bedrock Mantle client (server/src/llm/bedrockClient.js).
+  // Optional with a default rather than in `required` above — importing that
+  // module never throws before an actual call is made, so an unset/wrong
+  // region only breaks agent replies at request time, not server boot.
+  awsBedrockRegion: process.env.AWS_BEDROCK_REGION || 'ap-south-2',
   // The control-plane Lambda's public Function URL — this is the same
   // front-door address the web client itself talks to (not a secret), so a
   // hardcoded default is fine and avoids requiring a matching .env edit on
